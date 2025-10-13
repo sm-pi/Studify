@@ -42,9 +42,7 @@ class LoginScreen extends StatelessWidget {
                 Image.asset(
                   'assets/images/logo.png',
                   height: 180,
-                  // This builder is called if the image fails to load
                   errorBuilder: (context, error, stackTrace) {
-                    // Return a fallback widget
                     return Icon(
                       Icons.school, // University icon
                       size: 120,
@@ -1102,3 +1100,4 @@ class CustomButton extends StatelessWidget {
     );
   }
 }
+
