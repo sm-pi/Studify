@@ -4,7 +4,7 @@ import 'package:studify_app/screens/login_screen.dart';
 void main() {
   runApp(UniversityConnectApp());
 }
-
+//Main File
 class UniversityConnectApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
