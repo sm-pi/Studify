@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:studify_app/screens/login_screen.dart';
+import 'package:studify/screens/login_screen.dart';
 
 class MenuTab extends StatefulWidget {
   final List<Map<String, dynamic>> notifications;

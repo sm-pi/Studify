@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:studify_app/screens/add_friends_screen.dart';
-import 'package:studify_app/widgets/custom_button.dart';
-import 'package:studify_app/widgets/custom_text_field.dart';
+import 'package:studify/screens/add_friends_screen.dart';
+import 'package:studify/widgets/custom_button.dart';
+import 'package:studify/widgets/custom_text_field.dart';
 
 class RegisterScreen extends StatelessWidget {
   final TextEditingController nameController = TextEditingController();

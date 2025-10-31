@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:studify_app/tabs/feed_tab.dart';
-import 'package:studify_app/tabs/friends_tab.dart';
-import 'package:studify_app/tabs/groups_tab.dart';
-import 'package:studify_app/tabs/menu_tab.dart';
-import 'package:studify_app/tabs/profile_tab.dart';
+import 'package:studify/tabs/feed_tab.dart';
+import 'package:studify/tabs/friends_tab.dart';
+import 'package:studify/tabs/groups_tab.dart';
+import 'package:studify/tabs/menu_tab.dart';
+import 'package:studify/tabs/profile_tab.dart';
 
 class HomeScreen extends StatefulWidget {
   HomeScreen({super.key});

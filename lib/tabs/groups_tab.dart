@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:studify_app/screens/group_chat_screen.dart';
+import 'package:studify/screens/group_chat_screen.dart';
 
 class GroupsTab extends StatelessWidget {
   final List<Map<String, dynamic>> groups;
