@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "914674489473",
+    "project_id": "sdp-project-fc166",
+    "storage_bucket": "sdp-project-fc166.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:914674489473:android:b200c9691f8c618e611580",
+        "android_client_info": {
+          "package_name": "com.example.studify_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDAyAAXu7eydLJ2QWxqMCoCoO7ZYpDXXJs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
