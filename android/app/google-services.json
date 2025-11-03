@@ -12,7 +12,20 @@
           "package_name": "com.example.studify_app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "914674489473-kllavhcnphmpna672dqph11raptcipb3.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.studify_app",
+            "certificate_hash": "b9f7468dfde6f8ff8a0d94cbdb1167133e3c4d7a"
+          }
+        },
+        {
+          "client_id": "914674489473-aaqrjp0shq1krljvqmhrk52hm223s957.apps.googleusercontent.com",
+          "client_type": 1
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDAyAAXu7eydLJ2QWxqMCoCoO7ZYpDXXJs"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "914674489473-aaqrjp0shq1krljvqmhrk52hm223s957.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "914674489473-a01tte690tbm802fqui4j7erh13n0aaj.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.studifyApp"
+              }
+            }
+          ]
         }
       }
     }
