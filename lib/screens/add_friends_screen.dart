@@ -3,7 +3,7 @@ import 'package:studify/screens/home_screen.dart';
 import 'package:studify/widgets/custom_button.dart';
 
 class AddFriendsScreen extends StatefulWidget {
-  AddFriendsScreen({super.key});
+  const AddFriendsScreen({super.key});
 
   @override
   State<AddFriendsScreen> createState() => _AddFriendsScreenState();

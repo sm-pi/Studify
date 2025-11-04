@@ -26,7 +26,7 @@ class FriendsTab extends StatelessWidget {
             ...students
                 .map((s) => ConnectionTile(
                 name: s['name'], subtitle: "${s['mutual']} mutual friends"))
-                .toList(),
+                ,
             const SizedBox(height: 12),
             const Divider(),
             const SizedBox(height: 8),
@@ -35,7 +35,7 @@ class FriendsTab extends StatelessWidget {
             const SizedBox(height: 8),
             ...faculty
                 .map((f) => ConnectionTile(name: f['name'], subtitle: f['type']))
-                .toList(),
+                ,
           ],
         ),
       ),

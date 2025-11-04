@@ -13,9 +13,6 @@ Future<void> main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  // --- 3. THIS IS THE FIX ---
-  // Initialize the GoogleSignIn plugin with your Web Client ID
-  // This is what solves the "serverClientId must be provided" crash
   await GoogleSignIn.instance.initialize(
     serverClientId: "914674489473-aaqrjp0shq1krljvqmhrk52hm223s957.apps.googleusercontent.com",
   );
@@ -25,6 +22,8 @@ Future<void> main() async {
 }
 
 class UniversityConnectApp extends StatelessWidget {
+  const UniversityConnectApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(

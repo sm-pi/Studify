@@ -6,7 +6,7 @@ import 'package:studify/tabs/menu_tab.dart';
 import 'package:studify/tabs/profile_tab.dart';
 
 class HomeScreen extends StatefulWidget {
-  HomeScreen({super.key});
+  const HomeScreen({super.key});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
