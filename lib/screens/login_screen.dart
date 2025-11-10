@@ -5,12 +5,13 @@ import 'package:studify/screens/add_friends_screen.dart';
 import 'package:studify/screens/register_screen.dart';
 import 'package:studify/widgets/custom_button.dart';
 import 'package:studify/widgets/custom_text_field.dart';
-import 'package:studify/services/auth_service.dart'; // <-- Imports your new file
+import 'package:studify/services/auth_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:google_sign_in/google_sign_in.dart'; // <-- Imports for error handling
+import 'package:google_sign_in/google_sign_in.dart';
+// We no longer need role_selection_screen.dart
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  LoginScreen({super.key});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -20,8 +21,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
 
-  final AuthService _authService = AuthService(); // <-- This line will now work
-
+  final AuthService _authService = AuthService();
   bool _isLoading = false;
 
   void _showError(String message) {
@@ -34,7 +34,6 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // Handle Email/Password Login
   void _handleLogin() async {
     if (emailController.text.isEmpty || passwordController.text.isEmpty) {
       _showError("Please enter both email and password.");
@@ -63,13 +62,15 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  // Handle Google Sign-In
   void _handleGoogleSignIn() async {
     setState(() => _isLoading = true);
     try {
+      // --- THIS IS THE FIX ---
+      // We go back to expecting a simple User? object
       User? user = await _authService.signInWithGoogle();
 
       if (user != null && mounted) {
+        // All users (new or old) go to the same place
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => AddFriendsScreen()),
@@ -78,7 +79,6 @@ class _LoginScreenState extends State<LoginScreen> {
     } on FirebaseAuthException catch (e) {
       _showError(e.message ?? "An unknown error occurred.");
     } on GoogleSignInException catch (e) {
-      // Catches Google errors, like "canceled"
       _showError(e.description ?? "Google Sign-In failed.");
     } catch (e) {
       _showError("An unknown error occurred.");
@@ -89,9 +89,9 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-
   @override
   Widget build(BuildContext context) {
+    // ... your build method is unchanged ...
     return Scaffold(
       body: SafeArea(
         child: Padding(
@@ -135,9 +135,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton(
-                        onPressed: _isLoading ? null : () {
-                          // TODO: Add Forgot Password logic
-                        },
+                        onPressed: _isLoading ? null : () {},
                         child: const Text("Forgot Password?"),
                       ),
                     ),

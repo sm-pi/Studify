@@ -125,7 +125,7 @@ class _HomeScreenState extends State<HomeScreen> {
         groupMessages: groupMessages,
       ),
       FriendsTab(friends: sampleFriends),
-      ProfileTab(profile: sampleProfile),
+      ProfileTab(),
       MenuTab(
         notifications: notifications,
         resources: resources,

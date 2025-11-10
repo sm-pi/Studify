@@ -1,11 +1,12 @@
 // lib/screens/register_screen.dart
 
 import 'package:flutter/material.dart';
-import 'package:studify/screens/login_screen.dart'; // Import LoginScreen
+import 'package:studify/screens/login_screen.dart';
 import 'package:studify/widgets/custom_button.dart';
 import 'package:studify/widgets/custom_text_field.dart';
-import 'package:studify/services/auth_service.dart'; // Imports the service
+import 'package:studify/services/auth_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+// We no longer need role_selection_screen.dart
 
 class RegisterScreen extends StatefulWidget {
   RegisterScreen({super.key});
@@ -33,10 +34,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  // This is the single, correct function
   void _handleRegister() async {
-    if (emailController.text.isEmpty || passwordController.text.isEmpty) {
-      _showMessage("Please enter email and password.", isError: true);
+    if (emailController.text.isEmpty || passwordController.text.isEmpty || nameController.text.isEmpty) {
+      _showMessage("Please fill in all fields.", isError: true);
       return;
     }
 
@@ -46,16 +46,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
       User? user = await _authService.registerWithEmail(
         emailController.text.trim(),
         passwordController.text.trim(),
+        nameController.text.trim(),
       );
 
       if (user != null && mounted) {
         _showMessage("Registration successful! Please check your email to verify.", isError: false);
 
-        // This correctly sends the user back to the Login page
+        // REVERTED: Send user to Login screen to verify
         Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (context) => LoginScreen()),
-              (route) => false, // Clear all routes
+              (route) => false,
         );
       }
     } on FirebaseAuthException catch (e) {
@@ -67,10 +68,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 
-  // The duplicated code that was here is now removed.
-
   @override
   Widget build(BuildContext context) {
+    // ... your build method is unchanged ...
     return Scaffold(
       appBar: AppBar(
         title: const Text("Create Account"),
