@@ -15,18 +15,16 @@ class StorageService {
     _cloudinary = CloudinaryPublic(_cloudName, _uploadPreset, cache: false);
   }
 
-  /// --- NEW FUNCTION: Picks ONLY images for profile pictures ---
+  /// Picks ONLY images for profile pictures
   Future<File?> pickProfileImage() async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.image, // This automatically restricts to common image formats
-        // You could also use: type: FileType.custom, allowedExtensions: ['jpg', 'png', 'jpeg']
+        type: FileType.image,
       );
 
       if (result != null && result.files.single.path != null) {
         return File(result.files.single.path!);
       } else {
-        // User canceled the picker
         return null;
       }
     } catch (e) {
@@ -35,7 +33,32 @@ class StorageService {
     }
   }
 
-  /// Uploads any file (image, pdf, etc.) and returns the secure URL
+  /// --- NEW FUNCTION ---
+  /// Picks an image or PDF for a post.
+  /// Returns the File, File Name, and File Type
+  Future<Map<String, dynamic>?> pickPostAttachment(bool pickImage) async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: pickImage ? FileType.image : FileType.custom,
+        allowedExtensions: pickImage ? null : ['pdf'],
+      );
+
+      if (result != null && result.files.single.path != null) {
+        return {
+          'file': File(result.files.single.path!),
+          'fileName': result.files.single.name,
+          'fileType': pickImage ? 'image' : 'pdf',
+        };
+      } else {
+        return null;
+      }
+    } catch (e) {
+      print("Error picking attachment: $e");
+      return null;
+    }
+  }
+
+  /// Uploads any file and returns the secure URL
   Future<String> uploadFile(File file) async {
     try {
       CloudinaryResponse response = await _cloudinary.uploadFile(
@@ -43,7 +66,6 @@ class StorageService {
       );
 
       return response.secureUrl;
-
     } catch (e) {
       print("Error uploading file: $e");
       rethrow;
