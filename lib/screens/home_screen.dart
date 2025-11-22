@@ -80,12 +80,13 @@ class _HomeScreenState extends State<HomeScreen> {
         groups: sampleGroups,
         groupMessages: groupMessages,
       ),
-      FriendsTab(friends: sampleFriends),
+      FriendsTab(),
       ProfileTab(),
       MenuTab(
-        notifications: notifications,
-        resources: resources,
-        announcements: announcements,
+        //profile: sampleProfile,
+        //notifications: notifications,
+        //resources: resources,
+        //announcements: announcements,
       ),
     ];
   }
