@@ -4,10 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:studify/screens/chat_screen.dart';
-import 'package:studify/screens/find_friends_screen.dart';
-import 'package:studify/screens/friend_requests_screen.dart';
+import 'package:studify/screens/friend_requests_screen.dart'; // <--- UPDATED IMPORT
+import 'package:studify/screens/user_profile_screen.dart';
 import 'package:studify/services/friend_service.dart';
-import 'package:studify/services/chat_service.dart';
 
 class FriendsTab extends StatefulWidget {
   const FriendsTab({super.key});
@@ -17,9 +16,8 @@ class FriendsTab extends StatefulWidget {
 }
 
 class _FriendsTabState extends State<FriendsTab> {
-  final String currentUid = FirebaseAuth.instance.currentUser!.uid;
   final FriendService _friendService = FriendService();
-  final ChatService _chatService = ChatService();
+  final String currentUid = FirebaseAuth.instance.currentUser!.uid;
 
   @override
   Widget build(BuildContext context) {
@@ -28,102 +26,62 @@ class _FriendsTabState extends State<FriendsTab> {
         title: const Text("Friends"),
         centerTitle: true,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_active),
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FriendRequestsScreen())),
-          ),
+          // TOP RIGHT ICON: Goes to Requests & Search Page
           IconButton(
             icon: const Icon(Icons.person_add),
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FindFriendsScreen())),
-          ),
+            onPressed: () {
+              Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => const FriendRequestsScreen()
+              ));
+            },
+          )
         ],
       ),
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildSuggestionsSection(),
-            const Divider(thickness: 1, height: 30),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Text("Your Friends", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey[800])),
+            // 1. CIRCULAR HEADER: Suggestions
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 5),
+              child: Text("People You May Know", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo)),
             ),
-            _buildFriendsList(),
+            const Padding(
+              padding: EdgeInsets.only(left: 16.0, bottom: 5),
+              child: Text("Department Suggestions", style: TextStyle(fontSize: 12, color: Colors.grey)),
+            ),
+            _buildCircularSuggestions(),
+
+            const Divider(thickness: 1),
+
+            // 2. MY FRIENDS LIST
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 10, 16, 10),
+              child: Text("My Friends", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            ),
+            _buildMyFriendsList(),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildSuggestionsSection() {
-    return FutureBuilder<List<DocumentSnapshot>>(
-      future: _friendService.getSuggestedFriends(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData || snapshot.data!.isEmpty) return const SizedBox.shrink();
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Text("People You May Know", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey[800])),
-            ),
-            SizedBox(
-              height: 190,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                itemCount: snapshot.data!.length,
-                itemBuilder: (context, index) {
-                  var userDoc = snapshot.data![index];
-                  var userData = userDoc.data() as Map<String, dynamic>;
-                  String uid = userDoc.id;
-
-                  return Container(
-                    width: 140,
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    child: Card(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          CircleAvatar(
-                            radius: 35,
-                            backgroundImage: (userData['profilePicUrl'] ?? '').isNotEmpty ? NetworkImage(userData['profilePicUrl']) : null,
-                            child: (userData['profilePicUrl'] ?? '').isEmpty ? Text((userData['name'] ?? 'U')[0]) : null,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(userData['name'] ?? 'Unknown', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 8),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(minimumSize: const Size(100, 30), padding: EdgeInsets.zero, backgroundColor: Colors.indigo, foregroundColor: Colors.white),
-                            onPressed: () async {
-                              await _friendService.sendFriendRequest(uid);
-                              setState(() => snapshot.data!.removeAt(index));
-                            },
-                            child: const Text("Add", style: TextStyle(fontSize: 12)),
-                          )
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildFriendsList() {
+  // --- WIDGET 1: My Friends (Vertical List) ---
+  Widget _buildMyFriendsList() {
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance.collection('users').doc(currentUid).snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-        var userData = snapshot.data!.data() as Map<String, dynamic>;
-        List friendUids = userData['friend_uids'] ?? [];
 
-        if (friendUids.isEmpty) return const Padding(padding: EdgeInsets.all(30.0), child: Center(child: Text("No friends yet.")));
+        var myData = snapshot.data!.data() as Map<String, dynamic>;
+        List friendUids = myData['friend_uids'] ?? [];
+
+        if (friendUids.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.all(20.0),
+            child: Text("No friends yet. Add people using the icon above!"),
+          );
+        }
 
         return ListView.builder(
           shrinkWrap: true,
@@ -131,53 +89,114 @@ class _FriendsTabState extends State<FriendsTab> {
           itemCount: friendUids.length,
           itemBuilder: (context, index) {
             String friendUid = friendUids[index];
+
             return FutureBuilder<DocumentSnapshot>(
               future: FirebaseFirestore.instance.collection('users').doc(friendUid).get(),
-              builder: (context, friendSnap) {
-                if (!friendSnap.hasData) return const SizedBox.shrink();
-                var friendData = friendSnap.data!.data() as Map<String, dynamic>;
+              builder: (context, userSnapshot) {
+                if (!userSnapshot.hasData) return const SizedBox();
+                var userData = userSnapshot.data!.data() as Map<String, dynamic>;
 
-                return ListTile(
-                  leading: CircleAvatar(
-                    backgroundImage: (friendData['profilePicUrl'] ?? '').isNotEmpty ? NetworkImage(friendData['profilePicUrl']) : null,
-                    child: (friendData['profilePicUrl'] ?? '').isEmpty ? Text((friendData['name'] ?? 'U')[0]) : null,
-                  ),
-                  title: Text(friendData['name'] ?? 'Unknown'),
-                  subtitle: Text(friendData['department'] ?? ''),
-
-                  // --- RED DOT LOGIC ---
-                  trailing: StreamBuilder<int>(
-                      stream: _chatService.getUnreadCountStream(friendUid),
-                      builder: (context, countSnap) {
-                        int unreadCount = countSnap.data ?? 0;
-
-                        return Stack(
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.message, color: Colors.indigo),
-                              onPressed: () {
-                                Navigator.push(context, MaterialPageRoute(builder: (_) => ChatScreen(friendUid: friendUid, friendName: friendData['name'] ?? 'Friend')));
-                              },
-                            ),
-                            if (unreadCount > 0)
-                              Positioned(
-                                right: 8,
-                                top: 8,
-                                child: Container(
-                                  padding: const EdgeInsets.all(4),
-                                  decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                                  constraints: const BoxConstraints(minWidth: 12, minHeight: 12),
-                                  child: Text("$unreadCount", style: const TextStyle(color: Colors.white, fontSize: 10), textAlign: TextAlign.center),
-                                ),
-                              ),
-                          ],
-                        );
-                      }
+                return Card(
+                  margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  child: ListTile(
+                    leading: CircleAvatar(
+                      backgroundImage: (userData['profilePicUrl'] ?? '').isNotEmpty
+                          ? NetworkImage(userData['profilePicUrl'])
+                          : null,
+                      child: (userData['profilePicUrl'] ?? '').isEmpty ? Text((userData['name']??'U')[0]) : null,
+                    ),
+                    title: Text(userData['name'] ?? 'Unknown'),
+                    subtitle: Text(userData['department'] ?? 'Student'),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.chat_bubble, color: Colors.indigo),
+                      onPressed: () {
+                        Navigator.push(context, MaterialPageRoute(
+                            builder: (_) => ChatScreen(friendUid: friendUid, friendName: userData['name'])
+                        ));
+                      },
+                    ),
+                    onTap: () {
+                      Navigator.push(context, MaterialPageRoute(
+                          builder: (_) => UserProfileScreen(targetUid: friendUid, userName: userData['name'])
+                      ));
+                    },
                   ),
                 );
               },
             );
           },
+        );
+      },
+    );
+  }
+
+  // --- WIDGET 2: Circular Suggestions (Horizontal) ---
+  Widget _buildCircularSuggestions() {
+    return FutureBuilder<List<DocumentSnapshot>>(
+      future: _friendService.getSuggestedFriends(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) return const SizedBox(height: 100, child: Center(child: CircularProgressIndicator()));
+
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.all(16.0),
+            child: Text("No new suggestions.", style: TextStyle(color: Colors.grey)),
+          );
+        }
+
+        return Container(
+          height: 140,
+          padding: const EdgeInsets.symmetric(vertical: 5),
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: snapshot.data!.length,
+            itemBuilder: (context, index) {
+              var doc = snapshot.data![index];
+              var data = doc.data() as Map<String, dynamic>;
+              String uid = doc.id;
+
+              return Container(
+                width: 100,
+                margin: const EdgeInsets.symmetric(horizontal: 5),
+                child: Column(
+                  children: [
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.push(context, MaterialPageRoute(
+                            builder: (_) => UserProfileScreen(targetUid: uid, userName: data['name'])
+                        ));
+                      },
+                      child: CircleAvatar(
+                        radius: 30,
+                        backgroundColor: Colors.indigo.shade100,
+                        backgroundImage: (data['profilePicUrl'] ?? '').isNotEmpty
+                            ? NetworkImage(data['profilePicUrl'])
+                            : null,
+                        child: (data['profilePicUrl'] ?? '').isEmpty ? Text((data['name']??'U')[0]) : null,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      (data['name'] ?? 'User').split(" ")[0],
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                    SizedBox(
+                      height: 30,
+                      child: IconButton(
+                        icon: const Icon(Icons.person_add_alt_1, size: 20, color: Colors.indigo),
+                        onPressed: () async {
+                          await _friendService.sendFriendRequest(uid);
+                          setState(() {}); // Refresh to hide
+                          if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Request Sent!")));
+                        },
+                      ),
+                    )
+                  ],
+                ),
+              );
+            },
+          ),
         );
       },
     );

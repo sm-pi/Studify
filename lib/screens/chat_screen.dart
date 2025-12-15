@@ -5,9 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:studify/services/chat_service.dart';
 import 'package:studify/widgets/custom_text_field.dart';
+import 'package:studify/screens/view_pdf_screen.dart'; // <--- IMPORT THE VIEWER
 
 class ChatScreen extends StatefulWidget {
   final String friendUid;
@@ -25,16 +25,12 @@ class _ChatScreenState extends State<ChatScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   bool _isUploading = false;
 
-  // --- THIS IS THE MISSING PIECE ---
   @override
   void initState() {
     super.initState();
-    // When this screen opens, tell database to remove the Red Dot
     _chatService.markMessagesAsRead(widget.friendUid);
   }
-  // -------------------------------
 
-  // --- SEND TEXT ---
   void _sendMessage() async {
     if (_messageController.text.trim().isEmpty) return;
     String text = _messageController.text.trim();
@@ -42,7 +38,6 @@ class _ChatScreenState extends State<ChatScreen> {
     await _chatService.sendMessage(receiverUid: widget.friendUid, messageText: text);
   }
 
-  // --- PICK AND SEND FILE ---
   Future<void> _pickAndSendFile(FileType type) async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: type,
@@ -57,22 +52,49 @@ class _ChatScreenState extends State<ChatScreen> {
       try {
         await _chatService.sendMessage(
             receiverUid: widget.friendUid,
-            messageText: "", // No text, just file
+            messageText: "",
             file: file,
             fileType: fileType
         );
       } catch (e) {
         print("Upload failed: $e");
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error uploading: $e")));
+        }
       } finally {
-        setState(() => _isUploading = false);
+        if (mounted) setState(() => _isUploading = false);
       }
     }
   }
 
-  Future<void> _launchUrl(String url) async {
-    if (!await launchUrl(Uri.parse(url))) {
-      throw Exception('Could not launch $url');
-    }
+  // --- IMAGE VIEWER: In-App Zoom ---
+  void _viewFullImage(String url) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: EdgeInsets.zero,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            InteractiveViewer(
+              panEnabled: true,
+              minScale: 0.5,
+              maxScale: 4,
+              child: Image.network(url, fit: BoxFit.contain),
+            ),
+            Positioned(
+              top: 40,
+              right: 20,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                onPressed: () => Navigator.pop(ctx),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -83,7 +105,6 @@ class _ChatScreenState extends State<ChatScreen> {
       appBar: AppBar(title: Text(widget.friendName)),
       body: Column(
         children: [
-          // --- MESSAGES LIST ---
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: _chatService.getMessages(widget.friendUid),
@@ -103,11 +124,8 @@ class _ChatScreenState extends State<ChatScreen> {
                     var data = docs[index].data() as Map<String, dynamic>;
                     bool isMe = data['senderUid'] == currentUid;
 
-                    // 1. DECRYPT TEXT
                     String encryptedContent = data['text'] ?? '';
                     String visibleText = _chatService.decryptMessage(encryptedContent);
-
-                    // 2. GET ATTACHMENT INFO
                     String? attachmentUrl = data['attachmentUrl'];
                     String? attachmentType = data['attachmentType'];
 
@@ -125,18 +143,37 @@ class _ChatScreenState extends State<ChatScreen> {
                           children: [
                             // A. SHOW IMAGE
                             if (attachmentType == 'image' && attachmentUrl != null)
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 8.0),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: Image.network(attachmentUrl, width: 150, fit: BoxFit.cover),
+                              GestureDetector(
+                                onTap: () => _viewFullImage(attachmentUrl),
+                                child: Padding(
+                                  padding: const EdgeInsets.only(bottom: 8.0),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Image.network(
+                                      attachmentUrl,
+                                      width: 150,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (context, error, stackTrace) => const Icon(Icons.broken_image, color: Colors.grey),
+                                    ),
+                                  ),
                                 ),
                               ),
 
-                            // B. SHOW PDF BUTTON
+                            // B. SHOW PDF BUTTON (UPDATED: Opens Viewer)
                             if (attachmentType == 'pdf' && attachmentUrl != null)
                               GestureDetector(
-                                onTap: () => _launchUrl(attachmentUrl),
+                                onTap: () {
+                                  // NAVIGATE TO PDF VIEWER
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => ViewPdfScreen(
+                                        pdfUrl: attachmentUrl!,
+                                        title: "Document",
+                                      ),
+                                    ),
+                                  );
+                                },
                                 child: Container(
                                   margin: const EdgeInsets.only(bottom: 8),
                                   padding: const EdgeInsets.all(8),
@@ -168,13 +205,11 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
 
-          // --- INPUT AREA ---
           if (_isUploading) const LinearProgressIndicator(),
           Padding(
             padding: const EdgeInsets.all(8.0),
             child: Row(
               children: [
-                // Attachment Button
                 IconButton(
                   icon: const Icon(Icons.attach_file, color: Colors.indigo),
                   onPressed: () {

@@ -4,10 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:studify/services/database_services.dart';
 import 'package:studify/services/storage_service.dart';
-import 'package:studify/widgets/custom_text_field.dart';
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
@@ -17,296 +14,243 @@ class EditProfileScreen extends StatefulWidget {
 }
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
-  final User? currentUser = FirebaseAuth.instance.currentUser;
-  late final DatabaseService _databaseService;
-  final StorageService _storageService = StorageService();
-
-  // Form Controllers
   final _formKey = GlobalKey<FormState>();
-  late TextEditingController _nameController;
-  late TextEditingController _bioController;
-  late TextEditingController _intakeController; // <-- Kept for Student Intake
+  final StorageService _storageService = StorageService();
+  final String uid = FirebaseAuth.instance.currentUser!.uid;
 
-  // --- THIS IS THE FIX ---
-  // We remove _deptController and add _selectedDepartment
-  String? _selectedRole;
-  String? _selectedDesignation;
-  String? _selectedDepartment; // <-- ADDED THIS
-  // -------------------------
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _bioController = TextEditingController();
+  final TextEditingController _intakeController = TextEditingController();
 
-  bool _isLoading = true;
-  bool _isSaving = false;
-
-  String? _existingProfilePicUrl;
-  File? _newImageFile;
-
-  final List<String> _roles = ['Student', 'Faculty Member'];
-  final List<String> _designations = [
-    'Professor', 'Asst. Professor', 'Lecturer', 'Lab Assistant',
-    'Research Assistant', 'Teaching Assistant'
+  // Lists
+  final List<String> _departments = [
+    'CSE', 'EEE', 'Civil', 'Textile', 'BBA',
+    'English', 'Law', 'Economics', 'Mathematics', 'Architecture'
   ];
-  final List<String> _departments = ['CSE', 'EEE', 'Civil', 'BBA', 'Textile', 'English', 'Law'];
+
+  final List<String> _designations = [
+    'Lecturer', 'Senior Lecturer', 'Assistant Professor',
+    'Associate Professor', 'Professor', 'Chairman', 'Dean'
+  ];
+
+  String? _role;
+  String? _selectedDept;
+  String? _selectedDesignation;
+  File? _imageFile;
+  String _currentPhotoUrl = "";
+  bool _isLoading = true;
+  bool _isUploading = false;
 
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController();
-    _bioController = TextEditingController();
-    _intakeController = TextEditingController();
-    // _deptController is no longer initialized
-
-    if (currentUser != null) {
-      _databaseService = DatabaseService(uid: currentUser!.uid);
-      _loadUserData();
-    } else {
-      setState(() => _isLoading = false);
-    }
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _bioController.dispose();
-    _intakeController.dispose();
-    // _deptController is no longer disposed
-    super.dispose();
+    _loadUserData();
   }
 
   Future<void> _loadUserData() async {
     try {
-      DocumentSnapshot doc =
-      await _databaseService.userCollection.doc(currentUser!.uid).get();
-
+      DocumentSnapshot doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
       if (doc.exists) {
         Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
-        _nameController.text = data['name'] ?? '';
-        _bioController.text = data['bio'] ?? '';
-        _intakeController.text = data['intake'] ?? ''; // For student
-        _selectedRole = data['role'];
-        _selectedDesignation = data['designation'];
-        _selectedDepartment = data['department']; // <-- USE THIS
+        setState(() {
+          _nameController.text = data['name'] ?? '';
+          _bioController.text = data['bio'] ?? '';
+          _currentPhotoUrl = data['profilePicUrl'] ?? '';
+          _role = data['role'];
 
-        // This logic handles "" (empty string) by converting it to null
-        if (_selectedDesignation != null && !_designations.contains(_selectedDesignation)) {
-          _selectedDesignation = null;
-        }
-        if (_selectedDepartment != null && !_departments.contains(_selectedDepartment)) {
-          _selectedDepartment = null;
-        }
+          String? loadedDept = data['department'];
+          if (_departments.contains(loadedDept)) _selectedDept = loadedDept;
+
+          String? loadedDesignation = data['designation'];
+          if (_designations.contains(loadedDesignation)) _selectedDesignation = loadedDesignation;
+
+          _intakeController.text = data['intake'] ?? '';
+        });
       }
     } catch (e) {
-      print("Error loading user data: $e");
+      print("Error: $e");
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      setState(() => _isLoading = false);
     }
   }
 
   Future<void> _pickImage() async {
-    try {
-      final File? image = await _storageService.pickProfileImage();
-      if (image != null) {
-        setState(() {
-          _newImageFile = image;
-        });
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Image pick failed: $e"), backgroundColor: Colors.red),
-      );
-    }
+    File? file = await _storageService.pickProfileImage();
+    if (file != null) setState(() => _imageFile = file);
   }
 
   Future<void> _saveProfile() async {
-    if (!_formKey.currentState!.validate() || _isSaving) return;
+    if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _isSaving = true);
+    if (_role == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please select a role")));
+      return;
+    }
+    // Admin needs NO department. Others DO.
+    if (_role != 'Admin' && _selectedDept == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please select a Department")));
+      return;
+    }
+
+    setState(() => _isUploading = true);
 
     try {
-      String? newProfilePicUrl;
-
-      if (_newImageFile != null) {
-        newProfilePicUrl = await _storageService.uploadFile(_newImageFile!);
+      String finalPhotoUrl = _currentPhotoUrl;
+      if (_imageFile != null) {
+        finalPhotoUrl = await _storageService.uploadFile(_imageFile!, 'image');
       }
 
-      Map<String, dynamic> dataToUpdate = {
+      Map<String, dynamic> updateData = {
         'name': _nameController.text.trim(),
         'bio': _bioController.text.trim(),
-        'role': _selectedRole,
-        'department': _selectedDepartment ?? '', // <-- USE THIS
+        'role': _role,
+        'profilePicUrl': finalPhotoUrl,
         'profileCompleted': true,
       };
 
-      if (newProfilePicUrl != null) {
-        dataToUpdate['profilePicUrl'] = newProfilePicUrl;
+      // --- CLEAN DATA LOGIC ---
+      if (_role == 'Admin') {
+        // Admin gets "Administration" as dept automatically, others removed
+        updateData['department'] = 'Administration';
+        updateData['intake'] = FieldValue.delete();
+        updateData['designation'] = FieldValue.delete();
+      } else {
+        // Students/Faculty save their specific fields
+        updateData['department'] = _selectedDept;
+
+        if (_role == 'Student') {
+          updateData['intake'] = _intakeController.text.trim();
+          updateData['designation'] = FieldValue.delete();
+        } else if (_role == 'Faculty Member') {
+          updateData['designation'] = _selectedDesignation;
+          updateData['intake'] = FieldValue.delete();
+        }
       }
 
-      if (_selectedRole == 'Student') {
-        dataToUpdate['intake'] = _intakeController.text.trim();
-        dataToUpdate['designation'] = '';
-      } else if (_selectedRole == 'Faculty Member') {
-        dataToUpdate['designation'] = _selectedDesignation;
-        dataToUpdate['intake'] = '';
-      }
-
-      await _databaseService.updateUserProfile(dataToUpdate);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text("Profile Updated!"), backgroundColor: Colors.green));
-        Navigator.of(context).pop();
-      }
+      await FirebaseFirestore.instance.collection('users').doc(uid).update(updateData);
+      if (mounted) Navigator.pop(context);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Failed to save: $e"), backgroundColor: Colors.red));
+      print("Error: $e");
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Failed to save")));
     } finally {
-      if (mounted) {
-        setState(() => _isSaving = false);
-      }
+      if (mounted) setState(() => _isUploading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+
+    // Check if user selected Admin to hide fields dynamically
+    bool isAdmin = _role == 'Admin';
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Edit Profile"),
-        actions: [
-          IconButton(
-            icon: _isSaving
-                ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white))
-                : const Icon(Icons.save),
-            onPressed: _saveProfile,
-          )
-        ],
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _buildForm(),
-    );
-  }
-
-  Widget _buildForm() {
-    return Form(
-      key: _formKey,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Center(
-              child: Stack(
-                children: [
-                  CircleAvatar(
-                    radius: 50,
-                    backgroundColor: Colors.indigo.shade100,
-                    backgroundImage: _newImageFile != null
-                        ? FileImage(_newImageFile!)
-                        : (_existingProfilePicUrl != null && _existingProfilePicUrl!.isNotEmpty
-                        ? NetworkImage(_existingProfilePicUrl!)
-                        : null) as ImageProvider?,
-                    child: (_newImageFile == null && (_existingProfilePicUrl == null || _existingProfilePicUrl!.isEmpty))
-                        ? const Icon(Icons.person, size: 50, color: Colors.indigo)
-                        : null,
-                  ),
-                  Positioned(
-                    bottom: 0,
-                    right: 0,
-                    child: CircleAvatar(
-                      radius: 18,
-                      backgroundColor: Colors.indigo,
-                      child: IconButton(
-                        icon: const Icon(Icons.camera_alt, size: 20, color: Colors.white),
-                        onPressed: _pickImage,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 24),
-            CustomTextField(
-              hintText: "Full Name",
-              controller: _nameController,
-              validator: (val) => val!.isEmpty ? "Enter your name" : null,
-            ),
-            const SizedBox(height: 16),
-            CustomTextField(
-              hintText: "Your Bio",
-              controller: _bioController,
-              maxLines: 3,
-            ),
-            const SizedBox(height: 24),
-            const Divider(),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              value: _selectedRole,
-              decoration: const InputDecoration(
-                labelText: "Your Role *",
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.school_outlined),
-              ),
-              hint: const Text("Select your role"),
-              items: _roles.map((role) {
-                return DropdownMenuItem(value: role, child: Text(role));
-              }).toList(),
-              onChanged: (value) {
-                setState(() => _selectedRole = value);
-              },
-              validator: (val) => val == null ? "Please select a role" : null,
-            ),
-            const SizedBox(height: 16),
-
-            // --- THIS IS THE FIXED DROPDOWN (Line 281) ---
-            DropdownButtonFormField<String>(
-              value: _selectedDepartment, // <-- USE STATE VARIABLE
-              decoration: const InputDecoration(
-                labelText: "Department *",
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.business_outlined),
-              ),
-              hint: const Text("Select your department"),
-              items: _departments.map((dept) {
-                return DropdownMenuItem(value: dept, child: Text(dept));
-              }).toList(),
-              onChanged: (value) {
-                setState(() => _selectedDepartment = value); // <-- UPDATE STATE VARIABLE
-              },
-              validator: (val) => val == null ? "Please select a department" : null, // <-- SIMPLIFIED
-            ),
-            const SizedBox(height: 16),
-
-            if (_selectedRole == 'Student')
-              CustomTextField(
-                hintText: "Intake (e.g., 52) *",
-                controller: _intakeController, // <-- This is correct, it's a text field
-                keyboardType: TextInputType.number,
-                prefixIcon: Icons.numbers_outlined,
-                validator: (val) => val!.isEmpty ? "Enter your intake" : null,
-              ),
-
-            if (_selectedRole == 'Faculty Member')
-              DropdownButtonFormField<String>(
-                value: _selectedDesignation, // <-- This is correct, it's a state variable
-                decoration: const InputDecoration(
-                  labelText: "Designation *",
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.work_outline),
+      appBar: AppBar(title: const Text("Edit Profile")),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            children: [
+              GestureDetector(
+                onTap: _pickImage,
+                child: CircleAvatar(
+                  radius: 50,
+                  backgroundColor: Colors.grey[300],
+                  backgroundImage: _imageFile != null
+                      ? FileImage(_imageFile!)
+                      : (_currentPhotoUrl.isNotEmpty ? NetworkImage(_currentPhotoUrl) : null) as ImageProvider?,
+                  child: (_imageFile == null && _currentPhotoUrl.isEmpty) ? const Icon(Icons.camera_alt, size: 40) : null,
                 ),
-                hint: const Text("Select your designation"),
-                items: _designations.map((designation) {
-                  return DropdownMenuItem(
-                      value: designation, child: Text(designation));
-                }).toList(),
-                onChanged: (value) {
-                  setState(() => _selectedDesignation = value);
-                },
-                validator: (val) =>
-                val == null ? "Please select a designation" : null,
               ),
-          ],
+              const SizedBox(height: 20),
+
+              TextFormField(
+                controller: _nameController,
+                decoration: const InputDecoration(labelText: "Full Name", border: OutlineInputBorder()),
+                validator: (val) => val!.isEmpty ? "Enter Name" : null,
+              ),
+              const SizedBox(height: 16),
+
+              DropdownButtonFormField<String>(
+                value: _role,
+                decoration: const InputDecoration(labelText: "Role", border: OutlineInputBorder()),
+                items: const [
+                  DropdownMenuItem(value: "Student", child: Text("Student")),
+                  DropdownMenuItem(value: "Faculty Member", child: Text("Faculty Member")),
+                  DropdownMenuItem(value: "Admin", child: Text("Admin (App Manager)")),
+                ],
+                onChanged: (val) {
+                  setState(() {
+                    _role = val;
+                    if (val == 'Admin') {
+                      // Clear academic fields immediately if Admin selected
+                      _selectedDept = null;
+                      _selectedDesignation = null;
+                      _intakeController.clear();
+                    }
+                  });
+                },
+              ),
+              const SizedBox(height: 16),
+
+              // --- ONLY SHOW ACADEMIC FIELDS IF NOT ADMIN ---
+              if (!isAdmin) ...[
+                DropdownButtonFormField<String>(
+                  value: _selectedDept,
+                  decoration: const InputDecoration(labelText: "Department", border: OutlineInputBorder()),
+                  menuMaxHeight: 300,
+                  items: _departments.map((dept) => DropdownMenuItem(value: dept, child: Text(dept))).toList(),
+                  onChanged: (val) => setState(() => _selectedDept = val),
+                  validator: (val) => val == null ? "Select Department" : null,
+                ),
+                const SizedBox(height: 16),
+
+                if (_role == 'Student')
+                  TextFormField(
+                    controller: _intakeController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: "Intake (e.g. 45)", border: OutlineInputBorder()),
+                    validator: (val) => val!.isEmpty ? "Enter Intake" : null,
+                  ),
+
+                if (_role == 'Faculty Member')
+                  DropdownButtonFormField<String>(
+                    value: _selectedDesignation,
+                    decoration: const InputDecoration(labelText: "Designation", border: OutlineInputBorder()),
+                    menuMaxHeight: 300,
+                    items: _designations.map((desig) => DropdownMenuItem(value: desig, child: Text(desig))).toList(),
+                    onChanged: (val) => setState(() => _selectedDesignation = val),
+                    validator: (val) => val == null ? "Select Designation" : null,
+                  ),
+                const SizedBox(height: 16),
+              ],
+
+              TextFormField(
+                controller: _bioController,
+                maxLines: 3,
+                decoration: const InputDecoration(labelText: "Bio / About Me", border: OutlineInputBorder()),
+              ),
+
+              const SizedBox(height: 30),
+
+              if (_isUploading)
+                const CircularProgressIndicator()
+              else
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _saveProfile,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.indigo,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                    child: const Text("SAVE CHANGES"),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );

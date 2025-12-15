@@ -11,10 +11,7 @@ class ChatService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final StorageService _storageService = StorageService();
 
-  // --- ENCRYPTION SETUP ---
-  // 1. The Key (32 chars)
   final _key = encrypt.Key.fromUtf8('my32lengthsupersecretnooneknows1');
-  // 2. The IV (16 chars) - Fixed
   final _iv = encrypt.IV.fromUtf8('my16byteivkey123');
 
   late final encrypt.Encrypter _encrypter;
@@ -40,7 +37,8 @@ class ChatService {
     String? attachmentUrl;
 
     if (file != null) {
-      attachmentUrl = await _storageService.uploadFile(file);
+      // Pass the fileType ('pdf' or 'image') to trigger the correct Raw/Image upload
+      attachmentUrl = await _storageService.uploadFile(file, fileType ?? 'image');
     }
 
     String encryptedText = "";
@@ -59,7 +57,7 @@ class ChatService {
       'attachmentUrl': attachmentUrl,
       'attachmentType': fileType,
       'timestamp': FieldValue.serverTimestamp(),
-      'isRead': false, // Starts as unread
+      'isRead': false,
     });
 
     String previewMsg = file != null ? "[Sent a File]" : "Sent a message";
@@ -91,44 +89,28 @@ class ChatService {
     }
   }
 
-  // --- RED DOT LOGIC: Get Unread Count ---
   Stream<int> getUnreadCountStream(String friendUid) {
     User? currentUser = _auth.currentUser;
     if (currentUser == null) return Stream.value(0);
 
     String chatRoomId = getChatRoomId(currentUser.uid, friendUid);
-
-    return _db
-        .collection('chat_rooms')
-        .doc(chatRoomId)
-        .collection('messages')
+    return _db.collection('chat_rooms').doc(chatRoomId).collection('messages')
         .where('senderUid', isEqualTo: friendUid)
         .where('receiverUid', isEqualTo: currentUser.uid)
         .where('isRead', isEqualTo: false)
-        .snapshots()
-        .map((snapshot) => snapshot.docs.length);
+        .snapshots().map((s) => s.docs.length);
   }
 
-  // --- RED DOT LOGIC: Clear the Dot ---
   Future<void> markMessagesAsRead(String friendUid) async {
     User? currentUser = _auth.currentUser;
     if (currentUser == null) return;
-
     String chatRoomId = getChatRoomId(currentUser.uid, friendUid);
-
-    QuerySnapshot unreadMessages = await _db
-        .collection('chat_rooms')
-        .doc(chatRoomId)
-        .collection('messages')
+    QuerySnapshot unreadMessages = await _db.collection('chat_rooms').doc(chatRoomId).collection('messages')
         .where('senderUid', isEqualTo: friendUid)
         .where('receiverUid', isEqualTo: currentUser.uid)
-        .where('isRead', isEqualTo: false)
-        .get();
-
+        .where('isRead', isEqualTo: false).get();
     WriteBatch batch = _db.batch();
-    for (var doc in unreadMessages.docs) {
-      batch.update(doc.reference, {'isRead': true});
-    }
+    for (var doc in unreadMessages.docs) { batch.update(doc.reference, {'isRead': true}); }
     await batch.commit();
   }
 }

@@ -22,6 +22,9 @@ dependencies:
   file_picker: ^10.3.3
   url_launcher: ^6.3.2
   encrypt: ^5.0.3
+  syncfusion_flutter_pdfviewer: ^31.2.15
+  http: ^1.6.0
+  path_provider: ^2.1.5
 
 dev_dependencies:
   flutter_test:

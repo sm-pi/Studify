@@ -18,24 +18,18 @@ class StorageService {
   /// Picks ONLY images for profile pictures
   Future<File?> pickProfileImage() async {
     try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.image,
-      );
-
+      FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.image);
       if (result != null && result.files.single.path != null) {
         return File(result.files.single.path!);
-      } else {
-        return null;
       }
+      return null;
     } catch (e) {
       print("Error picking image: $e");
       return null;
     }
   }
 
-  /// --- NEW FUNCTION ---
-  /// Picks an image or PDF for a post.
-  /// Returns the File, File Name, and File Type
+  /// Picks an image or PDF
   Future<Map<String, dynamic>?> pickPostAttachment(bool pickImage) async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -49,26 +43,54 @@ class StorageService {
           'fileName': result.files.single.name,
           'fileType': pickImage ? 'image' : 'pdf',
         };
-      } else {
-        return null;
       }
+      return null;
     } catch (e) {
       print("Error picking attachment: $e");
       return null;
     }
   }
 
-  /// Uploads any file and returns the secure URL
-  Future<String> uploadFile(File file) async {
+  /// --- THE FIX: Force everything to be 'Image' type ---
+  Future<String> uploadFile(File file, String fileType) async {
     try {
+      // TRICK: We set resourceType to 'Image' even for PDFs.
+      // This tells Cloudinary to treat the PDF as a visual document (Public).
+      // If we use 'Raw', it becomes Private (401 Error).
       CloudinaryResponse response = await _cloudinary.uploadFile(
-        CloudinaryFile.fromFile(file.path, resourceType: CloudinaryResourceType.Auto),
+        CloudinaryFile.fromFile(
+            file.path,
+            resourceType: CloudinaryResourceType.Image, // <--- FORCE IMAGE TYPE
+            folder: "studify_files"
+        ),
       );
 
-      return response.secureUrl;
+      // FORCE HTTPS (Android requires this)
+      String secureUrl = response.secureUrl;
+      if (secureUrl.startsWith("http://")) {
+        secureUrl = secureUrl.replaceFirst("http://", "https://");
+      }
+
+      print("✅ Cloudinary Upload Success ($fileType): $secureUrl");
+      return secureUrl;
+
     } catch (e) {
-      print("Error uploading file: $e");
-      rethrow;
+      print("❌ Cloudinary Upload Error: $e");
+      // Fallback: If 'Image' type fails for some PDF (rare), try 'Auto'
+      try {
+        print("⚠️ Retrying with Auto type...");
+        CloudinaryResponse response = await _cloudinary.uploadFile(
+          CloudinaryFile.fromFile(
+              file.path,
+              resourceType: CloudinaryResourceType.Auto,
+              folder: "studify_files"
+          ),
+        );
+        return response.secureUrl;
+      } catch (retryError) {
+        print("❌ Retry failed: $retryError");
+        rethrow;
+      }
     }
   }
 }

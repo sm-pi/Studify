@@ -1,138 +1,120 @@
+// lib/screens/group_chat_screen.dart
+
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:studify/services/group_service.dart';
+import 'package:studify/widgets/custom_text_field.dart'; // Ensure you have this widget
 
 class GroupChatScreen extends StatefulWidget {
   final String groupId;
-  final String title;
-  final List<Map<String, dynamic>> initialMessages;
+  final String groupName;
 
-  const GroupChatScreen({
-    required this.groupId,
-    required this.title,
-    required this.initialMessages,
-    super.key,
-  });
+  const GroupChatScreen({super.key, required this.groupId, required this.groupName});
 
   @override
   State<GroupChatScreen> createState() => _GroupChatScreenState();
 }
 
 class _GroupChatScreenState extends State<GroupChatScreen> {
-  late List<Map<String, dynamic>> messages;
-  final TextEditingController messageController = TextEditingController();
+  final TextEditingController _messageController = TextEditingController();
+  final GroupService _groupService = GroupService();
+  final String currentUid = FirebaseAuth.instance.currentUser!.uid;
 
-  @override
-  void initState() {
-    super.initState();
-    messages = List.from(widget.initialMessages);
-  }
-
-  void sendMessage() {
-    final text = messageController.text.trim();
-    if (text.isEmpty) return;
-    setState(() {
-      messages.add({"sender": "You", "text": text, "time": _nowTimeString()});
-      messageController.clear();
-    });
-  }
-
-  String _nowTimeString() {
-    final now = DateTime.now();
-    final h = now.hour.toString().padLeft(2, '0');
-    final m = now.minute.toString().padLeft(2, '0');
-    return "$h:$m";
-  }
-
-  Widget messageBubble(Map<String, dynamic> msg) {
-    final bool mine = msg['sender'] == "You";
-    return Align(
-      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-        constraints:
-        BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
-        decoration: BoxDecoration(
-          color: mine ? Colors.indigo[200] : Colors.grey[200],
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(12),
-            topRight: const Radius.circular(12),
-            bottomLeft: Radius.circular(mine ? 12 : 0),
-            bottomRight: Radius.circular(mine ? 0 : 12),
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (!mine)
-              Text(msg['sender'],
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-            const SizedBox(height: 4),
-            Text(msg['text']),
-            const SizedBox(height: 8),
-            Align(
-                alignment: Alignment.bottomRight,
-                child: Text(msg['time'],
-                    style: TextStyle(fontSize: 10, color: Colors.grey[700]))),
-          ],
-        ),
-      ),
-    );
+  void _sendMessage() {
+    if (_messageController.text.trim().isEmpty) return;
+    _groupService.sendGroupMessage(widget.groupId, _messageController.text.trim());
+    _messageController.clear();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.title),
-      ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: ListView.builder(
-                reverse: true, // Show newest messages at the bottom
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                itemCount: messages.length,
-                itemBuilder: (context, index) {
-                  final reversedIndex = messages.length - 1 - index;
-                  final message = messages[reversedIndex];
-                  return messageBubble(message);
-                },
-              ),
-            ),
-            // Message Input Bar
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: messageController,
-                      decoration: InputDecoration(
-                        hintText: "Type a message...",
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(20),
-                          borderSide: BorderSide.none,
+      appBar: AppBar(title: Text(widget.groupName)),
+      body: Column(
+        children: [
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: _groupService.getGroupMessages(widget.groupId),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                var docs = snapshot.data?.docs ?? [];
+
+                if (docs.isEmpty) {
+                  return const Center(child: Text("Start the conversation!"));
+                }
+
+                return ListView.builder(
+                  reverse: true,
+                  itemCount: docs.length,
+                  itemBuilder: (context, index) {
+                    var data = docs[index].data() as Map<String, dynamic>;
+                    bool isMe = data['senderUid'] == currentUid;
+
+                    return Align(
+                      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: isMe ? Colors.indigo : Colors.grey[300],
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        filled: true,
-                        fillColor: Colors.grey[200],
-                        contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Show Sender Name ONLY if it's not me
+                            if (!isMe)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 4.0),
+                                child: Text(
+                                  data['senderName'] ?? 'Unknown',
+                                  style: TextStyle(
+                                      color: Colors.indigo[800],
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold
+                                  ),
+                                ),
+                              ),
+
+                            // Message Text
+                            Text(
+                              data['text'] ?? '',
+                              style: TextStyle(
+                                  color: isMe ? Colors.white : Colors.black87,
+                                  fontSize: 16
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      onSubmitted: (_) => sendMessage(),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    icon: const Icon(Icons.send),
-                    onPressed: sendMessage,
-                    color: Theme.of(context).primaryColor,
-                  ),
-                ],
-              ),
+                    );
+                  },
+                );
+              },
             ),
-          ],
-        ),
+          ),
+
+          // Input Area
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Row(
+              children: [
+                Expanded(child: CustomTextField(controller: _messageController, hintText: "Type a message...")),
+                const SizedBox(width: 8),
+                CircleAvatar(
+                  backgroundColor: Colors.indigo,
+                  child: IconButton(
+                    icon: const Icon(Icons.send, color: Colors.white, size: 20),
+                    onPressed: _sendMessage,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

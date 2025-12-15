@@ -2,9 +2,9 @@
 
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:studify/services/post_service.dart';
-import 'package:studify/services/storage_service.dart';
-import 'package:studify/widgets/custom_text_field.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:studify/services/storage_service.dart'; // Ensure this is imported
 
 class CreatePostScreen extends StatefulWidget {
   const CreatePostScreen({super.key});
@@ -14,154 +14,126 @@ class CreatePostScreen extends StatefulWidget {
 }
 
 class _CreatePostScreenState extends State<CreatePostScreen> {
-  final PostService _postService = PostService();
-  final StorageService _storageService = StorageService(); // For uploading
-
   final TextEditingController _titleController = TextEditingController();
-  final TextEditingController _postController = TextEditingController();
-  bool _isLoading = false;
+  final TextEditingController _textController = TextEditingController();
+  final StorageService _storageService = StorageService();
 
-  // --- NEW STATE FOR ATTACHMENTS ---
-  File? _pickedFile;
-  String? _pickedFileName;
-  String? _pickedFileType;
-  // -----------------------------------
+  File? _selectedFile;
+  String? _fileName;
+  String? _fileType; // 'image' or 'pdf'
+  bool _isUploading = false;
 
-  Future<void> _pickAttachment(bool pickImage) async {
-    Map<String, dynamic>? result =
-    await _storageService.pickPostAttachment(pickImage);
-
+  // --- 1. PICK FILE ---
+  Future<void> _pickFile(bool isImage) async {
+    var result = await _storageService.pickPostAttachment(isImage);
     if (result != null) {
       setState(() {
-        _pickedFile = result['file'];
-        _pickedFileName = result['fileName'];
-        _pickedFileType = result['fileType'];
+        _selectedFile = result['file'];
+        _fileName = result['fileName'];
+        _fileType = result['fileType']; // Store the type ('image' or 'pdf')
       });
     }
   }
 
-  void _clearAttachment() {
-    setState(() {
-      _pickedFile = null;
-      _pickedFileName = null;
-      _pickedFileType = null;
-    });
-  }
-
-  void _submitPost() async {
-    if (_titleController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter a title.")),
-      );
+  // --- 2. UPLOAD & POST ---
+  Future<void> _createPost() async {
+    if (_titleController.text.isEmpty || _textController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Title and Text are required")));
       return;
     }
 
-    setState(() => _isLoading = true);
+    setState(() => _isUploading = true);
 
-    try {
-      String? attachmentUrl;
+    String? attachmentUrl;
 
-      // 1. Upload file if one is picked
-      if (_pickedFile != null) {
-        attachmentUrl = await _storageService.uploadFile(_pickedFile!);
-      }
-
-      // 2. Create the post in Firestore
-      await _postService.createPost(
-        title: _titleController.text.trim(),
-        textContent: _postController.text.trim(),
-        attachmentUrl: attachmentUrl,
-        attachmentFileName: _pickedFileName,
-        attachmentType: _pickedFileType,
-      );
-
-      if (mounted) {
-        Navigator.of(context).pop();
-      }
-    } catch (e) {
-      print("Error creating post: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Failed to post: $e"), backgroundColor: Colors.red),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+    // Fix: Pass both file AND fileType to the uploader
+    if (_selectedFile != null && _fileType != null) {
+      attachmentUrl = await _storageService.uploadFile(_selectedFile!, _fileType!);
     }
+
+    User? user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      // Get user name to save with post (optional but good for performance)
+      DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      String authorName = (userDoc.data() as Map<String, dynamic>)['name'] ?? 'Unknown';
+
+      await FirebaseFirestore.instance.collection('posts').add({
+        'authorUid': user.uid,
+        'authorName': authorName,
+        'title': _titleController.text.trim(),
+        'textContent': _textController.text.trim(),
+        'attachmentUrl': attachmentUrl,
+        'attachmentType': _fileType, // Save type to DB so Feed knows how to display it
+        'timestamp': FieldValue.serverTimestamp(),
+        'likes': [],
+      });
+    }
+
+    setState(() => _isUploading = false);
+    if (mounted) Navigator.pop(context);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Create Post"),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: ElevatedButton(
-              onPressed: _isLoading ? null : _submitPost,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.indigo,
-                foregroundColor: Colors.white,
-              ),
-              child: _isLoading
-                  ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-              )
-                  : const Text("Post"),
-            ),
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
+      appBar: AppBar(title: const Text("Create Post")),
+      body: Padding(
         padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            // --- NEW TITLE FIELD ---
-            CustomTextField(
-              controller: _titleController,
-              hintText: "Post Title",
-              prefixIcon: Icons.title,
-            ),
-            const SizedBox(height: 16),
-
-            // --- TEXT CONTENT FIELD ---
-            CustomTextField(
-              controller: _postController,
-              hintText: "What's on your mind? (Optional)",
-              maxLines: 8,
-            ),
-            const SizedBox(height: 16),
-
-            // --- NEW ATTACHMENT BUTTONS ---
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                OutlinedButton.icon(
-                  onPressed: () => _pickAttachment(true), // Pick Image
-                  icon: const Icon(Icons.image),
-                  label: const Text("Image"),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () => _pickAttachment(false), // Pick PDF
-                  icon: const Icon(Icons.picture_as_pdf),
-                  label: const Text("PDF"),
-                ),
-              ],
-            ),
-
-            // --- NEW: SHOWS THE PICKED FILE ---
-            if (_pickedFileName != null)
-              Chip(
-                label: Text(_pickedFileName!),
-                avatar: Icon(
-                  _pickedFileType == 'image' ? Icons.image : Icons.picture_as_pdf,
-                ),
-                onDeleted: _clearAttachment,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: _titleController,
+                decoration: const InputDecoration(labelText: "Title", border: OutlineInputBorder()),
               ),
-          ],
+              const SizedBox(height: 16),
+              TextField(
+                controller: _textController,
+                maxLines: 5,
+                decoration: const InputDecoration(labelText: "What's on your mind?", border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 16),
+
+              // Attachment Buttons
+              Row(
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: () => _pickFile(true), // Pick Image
+                    icon: const Icon(Icons.image),
+                    label: const Text("Image"),
+                  ),
+                  const SizedBox(width: 10),
+                  ElevatedButton.icon(
+                    onPressed: () => _pickFile(false), // Pick PDF
+                    icon: const Icon(Icons.picture_as_pdf),
+                    label: const Text("PDF"),
+                  ),
+                ],
+              ),
+
+              if (_selectedFile != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8.0),
+                  child: Text("Attached: $_fileName ($_fileType)", style: const TextStyle(color: Colors.green)),
+                ),
+
+              const SizedBox(height: 24),
+
+              if (_isUploading)
+                const Center(child: CircularProgressIndicator())
+              else
+                ElevatedButton(
+                  onPressed: _createPost,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.indigo,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  child: const Text("POST"),
+                ),
+            ],
+          ),
         ),
       ),
     );
