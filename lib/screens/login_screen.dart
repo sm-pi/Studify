@@ -1,17 +1,18 @@
 // lib/screens/login_screen.dart
 
 import 'package:flutter/material.dart';
-import 'package:studify/screens/add_friends_screen.dart';
-import 'package:studify/screens/register_screen.dart';
-import 'package:studify/widgets/custom_button.dart';
-import 'package:studify/widgets/custom_text_field.dart';
-import 'package:studify/services/auth_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-// We no longer need role_selection_screen.dart
+import 'package:studify/services/auth_service.dart';
+import 'package:studify/widgets/custom_button.dart';
+import 'package:studify/widgets/custom_text_field.dart';
+
+// --- IMPORTS FOR NAVIGATION ---
+import 'package:studify/screens/home_screen.dart';     // Target screen after login
+import 'package:studify/screens/register_screen.dart'; // Target screen for Sign Up
 
 class LoginScreen extends StatefulWidget {
-  LoginScreen({super.key});
+  const LoginScreen({super.key});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -34,6 +35,7 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  // --- 1. EMAIL LOGIN FUNCTION ---
   void _handleLogin() async {
     if (emailController.text.isEmpty || passwordController.text.isEmpty) {
       _showError("Please enter both email and password.");
@@ -48,9 +50,10 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       if (user != null && mounted) {
+        // SUCCESS: Direct link to Home Screen
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => AddFriendsScreen()),
+          MaterialPageRoute(builder: (context) => const HomeScreen()),
         );
       }
     } on FirebaseAuthException catch (e) {
@@ -62,18 +65,17 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  // --- 2. GOOGLE LOGIN FUNCTION ---
   void _handleGoogleSignIn() async {
     setState(() => _isLoading = true);
     try {
-      // --- THIS IS THE FIX ---
-      // We go back to expecting a simple User? object
       User? user = await _authService.signInWithGoogle();
 
       if (user != null && mounted) {
-        // All users (new or old) go to the same place
+        // SUCCESS: Direct link to Home Screen
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => AddFriendsScreen()),
+          MaterialPageRoute(builder: (context) => const HomeScreen()),
         );
       }
     } on FirebaseAuthException catch (e) {
@@ -91,7 +93,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // ... your build method is unchanged ...
     return Scaffold(
       body: SafeArea(
         child: Padding(
@@ -103,11 +104,12 @@ class _LoginScreenState extends State<LoginScreen> {
                 Column(
                   children: [
                     const SizedBox(height: 60),
+                    // Logo Image or Icon
                     Image.asset(
                       'assets/images/logo.png',
                       height: 180,
                       errorBuilder: (context, error, stackTrace) {
-                        return Icon(
+                        return const Icon(
                           Icons.school,
                           size: 120,
                           color: Colors.indigo,
@@ -121,30 +123,42 @@ class _LoginScreenState extends State<LoginScreen> {
                             fontWeight: FontWeight.w600,
                             color: Colors.grey[800])),
                     const SizedBox(height: 40),
+
+                    // Email Input
                     CustomTextField(
                       hintText: "University Email",
                       controller: emailController,
                     ),
                     const SizedBox(height: 16),
+
+                    // Password Input
                     CustomTextField(
                       hintText: "Password",
                       obscureText: true,
                       controller: passwordController,
                     ),
                     const SizedBox(height: 8),
+
+                    // Forgot Password Link
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton(
-                        onPressed: _isLoading ? null : () {},
+                        onPressed: _isLoading ? null : () {
+                          // Optional: Add Forgot Password logic here later
+                        },
                         child: const Text("Forgot Password?"),
                       ),
                     ),
                     const SizedBox(height: 12),
+
+                    // Login Button
                     CustomButton(
                       text: "Login",
                       onPressed: _isLoading ? () {} : _handleLogin,
                     ),
                     const SizedBox(height: 12),
+
+                    // Google Sign In Button
                     OutlinedButton.icon(
                       onPressed: _isLoading ? null : _handleGoogleSignIn,
                       icon: const Icon(Icons.mail_outline),
@@ -154,12 +168,17 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 24),
+
+                    // Sign Up Link
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         const Text("Don't have an account? "),
                         GestureDetector(
-                          onTap: _isLoading ? null : () => Navigator.push(
+                          // --- FIXED: Removed 'const' before RegisterScreen() ---
+                          onTap: _isLoading
+                              ? null
+                              : () => Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (context) => RegisterScreen(),
@@ -172,10 +191,12 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ],
                 ),
+
+                // Loading Indicator Overlay
                 if (_isLoading)
                   Container(
                     color: Colors.white.withOpacity(0.5),
-                    child: const CircularProgressIndicator(),
+                    child: const Center(child: CircularProgressIndicator()),
                   ),
               ],
             ),

@@ -21,21 +21,19 @@ class _HomeScreenState extends State<HomeScreen> {
   final String uid = FirebaseAuth.instance.currentUser!.uid;
 
   // --- 1. TABS FOR STUDENTS & FACULTY ---
-  // REMOVED 'const' here
   final List<Widget> _userTabs = [
     const FeedTab(),
     const GroupsTab(),
     const FriendsTab(),
     const MenuTab(),
-    ProfileTab(), // This is not const, so the list cannot be const
+    ProfileTab(),
   ];
 
   // --- 2. TABS FOR ADMINS ---
-  // REMOVED 'const' here
   final List<Widget> _adminTabs = [
     const MenuTab(),
     const GroupsTab(),
-    ProfileTab(), // This is not const
+    ProfileTab(),
   ];
 
   @override
@@ -73,7 +71,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 : const [
               NavigationDestination(icon: Icon(Icons.home), label: 'Feed'),
               NavigationDestination(icon: Icon(Icons.groups), label: 'Groups'),
-              NavigationDestination(icon: Icon(Icons.people), label: 'Network'),
+              // --- CHANGED FROM 'Network' TO 'Friends' HERE ---
+              NavigationDestination(icon: Icon(Icons.people), label: 'Friends'),
               NavigationDestination(icon: Icon(Icons.menu), label: 'Menu'),
               NavigationDestination(icon: Icon(Icons.person), label: 'Profile'),
             ],
