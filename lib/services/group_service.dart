@@ -24,13 +24,13 @@ class GroupService {
     }
 
     await _db.collection('groups').add({
-      'name': groupName,
-      'adminUid': groupAdmin,
+      'groupName': groupName,       // CHANGED from 'name' to 'groupName'
+      'adminId': groupAdmin,        // CHANGED from 'adminUid' to 'adminId'
       'members': memberUids,
       'recentMessage': 'Group created',
       'recentSender': '',
       'lastTimestamp': FieldValue.serverTimestamp(),
-      'iconUrl': '', // Placeholder for future icon logic
+      'iconUrl': '',
     });
   }
 
@@ -44,8 +44,8 @@ class GroupService {
 
     // Add to subcollection
     await _db.collection('groups').doc(groupId).collection('messages').add({
-      'text': message,
-      'senderUid': currentUser.uid,
+      'message': message,          // CHANGED from 'text' to 'message' (if your chat screen uses 'message')
+      'senderId': currentUser.uid, // CHANGED from 'senderUid' to 'senderId' (to match chat screen)
       'senderName': myName,
       'timestamp': FieldValue.serverTimestamp(),
       'type': 'text',
@@ -87,6 +87,7 @@ class GroupService {
   // Admin: Approve Request -> Creates Group -> Deletes Request
   Future<void> approveClubRequest(String requestId, String groupName, String requesterUid) async {
     // 1. Create the group (Set the requester as the owner)
+    // NOTE: This calls the updated createGroup function above, so it will correctly save 'adminId'
     await createGroup(groupName, [requesterUid], ownerUid: requesterUid);
 
     // 2. Delete the request

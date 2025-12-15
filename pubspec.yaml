@@ -25,14 +25,18 @@ dependencies:
   syncfusion_flutter_pdfviewer: ^31.2.15
   http: ^1.6.0
   path_provider: ^2.1.5
+  permission_handler: ^12.0.1
+  dio: ^5.9.0
+  open_file: ^3.5.10
+  image_picker: ^1.2.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^5.0.0
+  flutter_lints: ^6.0.0
 
   # 🧩 Add this plugin for launcher icon
-  flutter_launcher_icons: ^0.13.1
+  flutter_launcher_icons: ^0.14.4
 
 flutter:
   uses-material-design: true
