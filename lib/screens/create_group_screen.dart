@@ -46,7 +46,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
       appBar: AppBar(title: const Text("New Group")),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _isLoading ? null : _createGroup,
-        backgroundColor: Colors.indigo,
+        backgroundColor: Colors.white,
         label: _isLoading ? const Text("Creating...") : const Text("Create Group"),
         icon: const Icon(Icons.check),
       ),
