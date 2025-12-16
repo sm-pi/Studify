@@ -154,7 +154,6 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
             ),
           ],
         ),
-        // ACTIONS REMOVED: No add member button here anymore
       ),
       body: Column(
         children: [
@@ -257,9 +256,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
     bool isMe = data['senderId'] == currentUid;
     String type = data['type'] ?? 'text';
-    String? fileUrl = data['fileUrl'];
 
-    // Unique filename for downloading
+    // SAFETY FIX: Handle null/empty URLs safely
+    String fileUrl = data['fileUrl'] ?? '';
     String fileName = "file_${doc.id}.${type == 'image' ? 'jpg' : 'pdf'}";
 
     return Align(
@@ -282,37 +281,60 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (!isMe) ...[
-              Text(data['senderName'] ?? 'Admin', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10, color: Colors.indigo)),
+              Text(
+                  data['senderName'] ?? 'Admin',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10, color: Colors.indigo)
+              ),
               const SizedBox(height: 4),
             ],
 
             if (type == 'text')
-              Text(data['message'], style: const TextStyle(fontSize: 15)),
+              Text(data['message'] ?? '', style: const TextStyle(fontSize: 15)),
 
-            if (type == 'image' && fileUrl != null)
+            if (type == 'image')
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   GestureDetector(
-                    onTap: () => showDialog(context: context, builder: (_) => Dialog(child: Image.network(fileUrl))),
-                    child: Image.network(fileUrl, height: 150, width: 200, fit: BoxFit.cover),
-                  ),
-                  const SizedBox(height: 5),
-                  InkWell(
-                    onTap: () => _downloadFile(fileUrl, fileName),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.download, size: 18, color: Colors.blueGrey),
-                        SizedBox(width: 4),
-                        Text("Download Image", style: TextStyle(color: Colors.blueGrey, fontSize: 12)),
-                      ],
+                    onTap: () {
+                      if (fileUrl.isNotEmpty) {
+                        showDialog(context: context, builder: (_) => Dialog(
+                            child: Image.network(
+                              fileUrl,
+                              errorBuilder: (ctx, err, stack) => const SizedBox(height: 100, child: Center(child: Text("Image unavailable"))),
+                            )
+                        ));
+                      }
+                    },
+                    child: fileUrl.isEmpty
+                        ? _buildBrokenImagePlaceholder()
+                        : Image.network(
+                      fileUrl,
+                      height: 150,
+                      width: 200,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return _buildBrokenImagePlaceholder();
+                      },
                     ),
                   ),
+                  const SizedBox(height: 5),
+                  if (fileUrl.isNotEmpty)
+                    InkWell(
+                      onTap: () => _downloadFile(fileUrl, fileName),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.download, size: 18, color: Colors.blueGrey),
+                          SizedBox(width: 4),
+                          Text("Download Image", style: TextStyle(color: Colors.blueGrey, fontSize: 12)),
+                        ],
+                      ),
+                    ),
                 ],
               ),
 
-            if (type == 'pdf' && fileUrl != null)
+            if (type == 'pdf')
               Container(
                 margin: const EdgeInsets.only(top: 8),
                 padding: const EdgeInsets.all(8),
@@ -327,10 +349,13 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text("Document (PDF)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                          InkWell(
-                            onTap: () => _downloadFile(fileUrl, fileName),
-                            child: const Text("Tap to Download", style: TextStyle(color: Colors.blue, fontSize: 12)),
-                          )
+                          if (fileUrl.isNotEmpty)
+                            InkWell(
+                              onTap: () => _downloadFile(fileUrl, fileName),
+                              child: const Text("Tap to Download", style: TextStyle(color: Colors.blue, fontSize: 12)),
+                            )
+                          else
+                            const Text("File unavailable", style: TextStyle(color: Colors.grey, fontSize: 10, fontStyle: FontStyle.italic)),
                         ],
                       ),
                     ),
@@ -339,6 +364,22 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
               ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildBrokenImagePlaceholder() {
+    return Container(
+      height: 150,
+      width: 200,
+      color: Colors.grey[400],
+      child: const Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.broken_image, color: Colors.white, size: 40),
+          SizedBox(height: 4),
+          Text("Image not found", style: TextStyle(color: Colors.white, fontSize: 10)),
+        ],
       ),
     );
   }

@@ -45,17 +45,51 @@ class _FriendsTabState extends State<FriendsTab> {
         title: const Text("Friends & Network"),
         centerTitle: true,
         actions: [
-          // Go to Friend Requests
-          IconButton(
-            icon: const Icon(Icons.notifications_active_outlined),
-            onPressed: () {
-              Navigator.push(context, MaterialPageRoute(
-                  builder: (_) => const FriendRequestsScreen()
-              ));
+          // --- UPDATED: Notification Icon with Red Dot Logic ---
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('users')
+                .doc(currentUid)
+                .collection('friend_requests')
+                .snapshots(),
+            builder: (context, snapshot) {
+              // Check if we have data and if the list is not empty
+              bool hasRequests = snapshot.hasData && snapshot.data!.docs.isNotEmpty;
+
+              return Stack(
+                alignment: Alignment.center,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.notifications_active_outlined),
+                    onPressed: () {
+                      Navigator.push(context, MaterialPageRoute(
+                          builder: (_) => const FriendRequestsScreen()
+                      ));
+                    },
+                  ),
+                  // THE RED DOT
+                  if (hasRequests)
+                    Positioned(
+                      right: 11,
+                      top: 11,
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 10,
+                          minHeight: 10,
+                        ),
+                      ),
+                    )
+                ],
+              );
             },
           )
         ],
-        // --- SEARCH BAR ADDED HERE ---
+        // --- SEARCH BAR ---
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(60),
           child: Padding(
@@ -117,9 +151,7 @@ class _FriendsTabState extends State<FriendsTab> {
   // --- VIEW 2: SEARCH RESULTS ---
   Widget _buildSearchResults() {
     return StreamBuilder<QuerySnapshot>(
-      // Simple search: get all users (for prototypes) or use logic to filter
-      // For production with many users, use Algolia/ElasticSearch.
-      // Here we grab users and filter locally for simplicity.
+      // Simple search: get all users locally filtered
       stream: FirebaseFirestore.instance.collection('users').limit(50).snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
@@ -234,10 +266,9 @@ class _FriendsTabState extends State<FriendsTab> {
     );
   }
 
-  // --- COMPONENT: Circular Suggestions (Logic updated to force Department check) ---
+  // --- COMPONENT: Circular Suggestions ---
   Widget _buildCircularSuggestions() {
     return FutureBuilder<DocumentSnapshot>(
-      // 1. Get MY data first to know my department
       future: FirebaseFirestore.instance.collection('users').doc(currentUid).get(),
       builder: (context, mySnap) {
         if (!mySnap.hasData) return const SizedBox(height: 100, child: Center(child: CircularProgressIndicator()));
@@ -246,7 +277,6 @@ class _FriendsTabState extends State<FriendsTab> {
         String myDept = myData['department'] ?? '';
         List myFriends = myData['friend_uids'] ?? [];
 
-        // 2. Query users with SAME department
         return FutureBuilder<QuerySnapshot>(
           future: FirebaseFirestore.instance
               .collection('users')
@@ -260,7 +290,6 @@ class _FriendsTabState extends State<FriendsTab> {
 
             var docs = suggestionsSnap.data?.docs ?? [];
 
-            // 3. Filter out myself and existing friends
             var validSuggestions = docs.where((doc) {
               String uid = doc.id;
               return uid != currentUid && !myFriends.contains(uid);
@@ -316,7 +345,7 @@ class _FriendsTabState extends State<FriendsTab> {
                             icon: const Icon(Icons.person_add_alt_1, size: 20, color: Colors.indigo),
                             onPressed: () async {
                               await _friendService.sendFriendRequest(uid);
-                              setState(() {});
+                              setState(() {}); // refresh suggestions to remove added user if needed
                               if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Request Sent!")));
                             },
                           ),
