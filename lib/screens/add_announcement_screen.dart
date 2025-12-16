@@ -1,9 +1,7 @@
-// lib/screens/add_announcement_screen.dart
-
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart'; // Ensure file_picker is in pubspec.yaml
 import 'package:studify/services/menu_service.dart';
-import 'package:studify/services/storage_service.dart';
 
 class AddAnnouncementScreen extends StatefulWidget {
   const AddAnnouncementScreen({super.key});
@@ -16,24 +14,56 @@ class _AddAnnouncementScreenState extends State<AddAnnouncementScreen> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _contentController = TextEditingController();
   final MenuService _menuService = MenuService();
-  final StorageService _storageService = StorageService();
 
-  File? _selectedImage;
+  File? _selectedFile;
+  String? _fileType; // 'image' or 'pdf'
   bool _isUploading = false;
 
-  Future<void> _pickImage() async {
-    // Pick an image specifically
-    var result = await _storageService.pickPostAttachment(true);
-    if (result != null) {
+  // Generic Picker (Images or PDFs)
+  Future<void> _pickFile(FileType type) async {
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: type,
+      allowedExtensions: type == FileType.custom ? ['pdf'] : null,
+    );
+
+    if (result != null && result.files.single.path != null) {
       setState(() {
-        _selectedImage = result['file'];
+        _selectedFile = File(result.files.single.path!);
+        _fileType = type == FileType.image ? 'image' : 'pdf';
       });
     }
   }
 
+  void _showAttachmentOptions() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Wrap(
+        children: [
+          ListTile(
+            leading: const Icon(Icons.image, color: Colors.indigo),
+            title: const Text("Attach Image"),
+            onTap: () {
+              Navigator.pop(context);
+              _pickFile(FileType.image);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.picture_as_pdf, color: Colors.red),
+            title: const Text("Attach PDF"),
+            onTap: () {
+              Navigator.pop(context);
+              _pickFile(FileType.custom); // Custom triggers PDF only via extension above
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _postAnnouncement() async {
     if (_titleController.text.isEmpty || _contentController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Title and Content are required")));
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Title and Content are required")));
       return;
     }
 
@@ -43,13 +73,15 @@ class _AddAnnouncementScreenState extends State<AddAnnouncementScreen> {
       await _menuService.addAnnouncement(
         title: _titleController.text.trim(),
         content: _contentController.text.trim(),
-        imageFile: _selectedImage,
+        file: _selectedFile,
+        fileType: _fileType,
       );
       if (mounted) Navigator.pop(context);
     } catch (e) {
       print("Error: $e");
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Failed to post announcement")));
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Failed to post announcement")));
       }
     } finally {
       if (mounted) setState(() => _isUploading = false);
@@ -68,26 +100,44 @@ class _AddAnnouncementScreenState extends State<AddAnnouncementScreen> {
             children: [
               TextField(
                 controller: _titleController,
-                decoration: const InputDecoration(labelText: "Title", border: OutlineInputBorder()),
+                decoration: const InputDecoration(
+                    labelText: "Title", border: OutlineInputBorder()),
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: _contentController,
                 maxLines: 4,
-                decoration: const InputDecoration(labelText: "Content", border: OutlineInputBorder()),
+                decoration: const InputDecoration(
+                    labelText: "Content", border: OutlineInputBorder()),
               ),
               const SizedBox(height: 16),
 
-              // Image Picker Button
-              ElevatedButton.icon(
-                onPressed: _pickImage,
-                icon: const Icon(Icons.image),
-                label: const Text("Attach Image (Optional)"),
-              ),
-              if (_selectedImage != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8.0),
-                  child: Text("Image Attached: ${_selectedImage!.path.split('/').last}", style: const TextStyle(color: Colors.green)),
+              // Attachment Area
+              if (_selectedFile == null)
+                OutlinedButton.icon(
+                  onPressed: _showAttachmentOptions,
+                  icon: const Icon(Icons.attach_file),
+                  label: const Text("Attach File (Image or PDF)"),
+                )
+              else
+                Card(
+                  color: Colors.grey[100],
+                  child: ListTile(
+                    leading: Icon(
+                      _fileType == 'pdf' ? Icons.picture_as_pdf : Icons.image,
+                      color: _fileType == 'pdf' ? Colors.red : Colors.indigo,
+                    ),
+                    title: Text(_selectedFile!.path.split('/').last),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () {
+                        setState(() {
+                          _selectedFile = null;
+                          _fileType = null;
+                        });
+                      },
+                    ),
+                  ),
                 ),
 
               const SizedBox(height: 24),

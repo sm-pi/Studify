@@ -1,9 +1,8 @@
-// lib/screens/comment_screen.dart
-
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:studify/services/post_service.dart';
 import 'package:studify/widgets/custom_text_field.dart';
+import 'package:studify/widgets/avatar_from_profile.dart'; // Import widget
 
 class CommentScreen extends StatefulWidget {
   final String postId;
@@ -67,17 +66,15 @@ class _CommentScreenState extends State<CommentScreen> {
                   itemCount: comments.length,
                   itemBuilder: (context, index) {
                     final comment = comments[index].data() as Map<String, dynamic>;
-                    String profilePicUrl = comment['authorProfilePicUrl'] ?? '';
+                    String authorUid = comment['authorUid'] ?? '';
                     String authorName = comment['authorName'] ?? 'Anonymous';
 
                     return ListTile(
-                      leading: CircleAvatar(
-                        backgroundImage: profilePicUrl.isNotEmpty
-                            ? NetworkImage(profilePicUrl)
-                            : null,
-                        child: profilePicUrl.isEmpty
-                            ? Text(authorName[0])
-                            : null,
+                      // Use the new widget here
+                      leading: AvatarFromProfile(
+                        uid: authorUid,
+                        fallbackLabel: authorName,
+                        radius: 18,
                       ),
                       title: Text(authorName, style: const TextStyle(fontWeight: FontWeight.bold)),
                       subtitle: Text(comment['text'] ?? ''),

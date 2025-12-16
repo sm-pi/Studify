@@ -1,12 +1,11 @@
-// lib/tabs/feed_tab.dart
-
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:studify/screens/create_post_screen.dart';
 import 'package:studify/screens/comment_screen.dart';
+import 'package:studify/screens/view_pdf_screen.dart'; // <--- Vital Import
 import 'package:studify/services/post_service.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:studify/widgets/avatar_from_profile.dart';
 
 class FeedTab extends StatelessWidget {
   const FeedTab({super.key});
@@ -58,7 +57,6 @@ class FeedTab extends StatelessWidget {
                   text: post['textContent'] ?? '',
                   likes: post['likes'] ?? [],
                   comments: post['commentCount'] ?? 0,
-                  authorProfilePicUrl: post['authorProfilePicUrl'] ?? '',
                   attachmentUrl: post['attachmentUrl'],
                   attachmentFileName: post['attachmentFileName'],
                   attachmentType: post['attachmentType'],
@@ -82,7 +80,7 @@ class FeedTab extends StatelessWidget {
   }
 }
 
-// --- UPDATED POSTCARD WIDGET ---
+// --- POST CARD ---
 
 class PostCard extends StatelessWidget {
   final String postId;
@@ -93,7 +91,6 @@ class PostCard extends StatelessWidget {
   final String text;
   final List likes;
   final int comments;
-  final String authorProfilePicUrl;
   final String? attachmentUrl;
   final String? attachmentFileName;
   final String? attachmentType;
@@ -110,17 +107,53 @@ class PostCard extends StatelessWidget {
     required this.text,
     required this.likes,
     required this.comments,
-    required this.authorProfilePicUrl,
     this.attachmentUrl,
     this.attachmentFileName,
     this.attachmentType,
     super.key,
   });
 
-  Future<void> _launchUrl(String url) async {
-    if (!await launchUrl(Uri.parse(url))) {
-      throw Exception('Could not launch $url');
-    }
+  // --- PDF VIEWER NAVIGATION ---
+  void _openPDFViewer(BuildContext context, String url, String fileName) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ViewPdfScreen( // Using your existing widget
+          pdfUrl: url,
+          title: fileName,
+        ),
+      ),
+    );
+  }
+
+  // --- IMAGE VIEWER ---
+  void _openImageViewer(BuildContext context, String imageUrl) {
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: EdgeInsets.zero,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            InteractiveViewer(
+              panEnabled: true,
+              minScale: 0.5,
+              maxScale: 4.0,
+              child: Image.network(imageUrl),
+            ),
+            Positioned(
+              top: 40,
+              right: 20,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _showDeleteMenu(BuildContext context) {
@@ -149,7 +182,8 @@ class PostCard extends StatelessWidget {
                     ),
                   ],
                 ),
-              ) ?? false;
+              ) ??
+                  false;
 
               if (confirm) {
                 await _postService.deletePost(postId);
@@ -173,30 +207,28 @@ class PostCard extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 2,
       child: Padding(
         padding: const EdgeInsets.all(12.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Author Header
+            // --- HEADER ---
             Row(children: [
-              CircleAvatar(
-                backgroundImage: authorProfilePicUrl.isNotEmpty
-                    ? NetworkImage(authorProfilePicUrl)
-                    : null,
-                child: authorProfilePicUrl.isEmpty ? Text(author[0]) : null,
+              AvatarFromProfile(
+                uid: authorUid,
+                radius: 20,
+                fallbackLabel: author,
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(author,
-                          style: const TextStyle(fontWeight: FontWeight.bold)),
-                      Text(time,
-                          style:
-                          TextStyle(fontSize: 12, color: Colors.grey[600])),
-                    ]),
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(author, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    Text(time, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                  ],
+                ),
               ),
               if (authorUid == currentUserId)
                 IconButton(
@@ -206,29 +238,30 @@ class PostCard extends StatelessWidget {
             ]),
             const SizedBox(height: 10),
 
-            // Post Title
+            // --- TITLE ---
             Text(
               title,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-              ),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
             const SizedBox(height: 8),
 
-            // Post Text Content
-            if (text.isNotEmpty) Text(text),
+            // --- CONTENT ---
+            if (text.isNotEmpty)
+              Text(
+                text,
+                style: const TextStyle(fontSize: 15, height: 1.4),
+              ),
 
-            // Attachment Display
-            if (attachmentType != null)
-              _buildAttachment(),
+            // --- ATTACHMENT ---
+            if (attachmentType != null && attachmentUrl != null)
+              _buildAttachment(context),
 
             const SizedBox(height: 12),
+            const Divider(),
 
-            // --- Footer ---
+            // --- FOOTER ---
             Row(
               children: [
-                // Like Button
                 IconButton(
                   onPressed: () => _postService.toggleLike(postId, likes),
                   icon: Icon(
@@ -236,13 +269,9 @@ class PostCard extends StatelessWidget {
                     size: 20,
                     color: isLiked ? Colors.indigo : Colors.grey[700],
                   ),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
                 ),
-                const SizedBox(width: 6),
                 Text("${likes.length}"),
-                const SizedBox(width: 18),
-                // Comment Button
+                const SizedBox(width: 15),
                 IconButton(
                   onPressed: () {
                     Navigator.of(context).push(
@@ -252,13 +281,8 @@ class PostCard extends StatelessWidget {
                     );
                   },
                   icon: Icon(Icons.comment_outlined, size: 20, color: Colors.grey[700]),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
                 ),
-                const SizedBox(width: 6),
                 Text("$comments"),
-                const Spacer(),
-                // --- SHARE BUTTON REMOVED ---
               ],
             )
           ],
@@ -267,44 +291,73 @@ class PostCard extends StatelessWidget {
     );
   }
 
-  /// Attachment helper
-  Widget _buildAttachment() {
-    if (attachmentType == 'image' && attachmentUrl != null) {
+  Widget _buildAttachment(BuildContext context) {
+    // 1. IMAGE DISPLAY
+    if (attachmentType == 'image') {
       return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8.0),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Image.network(
-            attachmentUrl!,
-            width: double.infinity,
-            fit: BoxFit.cover,
+        padding: const EdgeInsets.symmetric(vertical: 12.0),
+        child: GestureDetector(
+          onTap: () => _openImageViewer(context, attachmentUrl!),
+          child: Hero(
+            tag: attachmentUrl!,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.network(
+                attachmentUrl!,
+                width: double.infinity,
+                height: 200,
+                fit: BoxFit.cover,
+                loadingBuilder: (ctx, child, progress) {
+                  if (progress == null) return child;
+                  return Container(
+                    height: 200,
+                    color: Colors.grey[200],
+                    child: const Center(child: CircularProgressIndicator()),
+                  );
+                },
+              ),
+            ),
           ),
         ),
       );
     }
 
-    if (attachmentType == 'pdf' && attachmentFileName != null) {
+    // 2. PDF DISPLAY (Uses your Syncfusion screen)
+    if (attachmentType == 'pdf') {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 8.0),
         child: InkWell(
-          onTap: () => _launchUrl(attachmentUrl!),
+          onTap: () => _openPDFViewer(context, attachmentUrl!, attachmentFileName ?? 'Document'),
+          borderRadius: BorderRadius.circular(8),
           child: Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(8),
-              color: Colors.grey[100],
+              color: Colors.red[50],
+              border: Border.all(color: Colors.red[100]!),
             ),
             child: Row(
               children: [
-                Icon(Icons.picture_as_pdf, color: Colors.red[700]),
+                const Icon(Icons.picture_as_pdf, color: Colors.red, size: 30),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Text(
-                    attachmentFileName!,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        attachmentFileName ?? 'Document.pdf',
+                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const Text(
+                        "Tap to view PDF",
+                        style: TextStyle(fontSize: 12, color: Colors.red),
+                      )
+                    ],
                   ),
                 ),
-                const Icon(Icons.open_in_new),
+                const Icon(Icons.chevron_right, color: Colors.grey),
               ],
             ),
           ),

@@ -1,5 +1,3 @@
-// lib/services/menu_service.dart
-
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -10,18 +8,23 @@ class MenuService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final StorageService _storageService = StorageService();
 
-  // Add Announcement (Image optional)
+  // Updated: Handles generic file attachment (Image OR PDF)
   Future<void> addAnnouncement({
     required String title,
     required String content,
-    File? imageFile,
+    File? file,
+    String? fileType, // 'image' or 'pdf'
   }) async {
     User? user = _auth.currentUser;
     if (user == null) return;
 
-    String? imageUrl;
-    if (imageFile != null) {
-      imageUrl = await _storageService.uploadFile(imageFile, 'image');
+    String? attachmentUrl;
+    String? attachmentName;
+
+    if (file != null && fileType != null) {
+      // Upload file based on type
+      attachmentUrl = await _storageService.uploadFile(file, fileType);
+      attachmentName = file.path.split('/').last;
     }
 
     DocumentSnapshot userDoc = await _db.collection('users').doc(user.uid).get();
@@ -33,7 +36,9 @@ class MenuService {
     await _db.collection('announcements').add({
       'title': title,
       'content': content,
-      'imageUrl': imageUrl,
+      'attachmentUrl': attachmentUrl,
+      'attachmentType': fileType, // 'image' or 'pdf'
+      'attachmentName': attachmentName,
       'authorUid': user.uid,
       'authorName': userName,
       'date': dateStr,

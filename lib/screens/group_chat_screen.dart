@@ -10,11 +10,13 @@ import 'package:cloudinary_public/cloudinary_public.dart';
 import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:studify/widgets/avatar_from_profile.dart';
+import 'package:studify/screens/group_info_screen.dart'; // <--- IMPORT THIS
 
 class GroupChatScreen extends StatefulWidget {
   final String groupId;
   final String groupName;
-  final String adminId; // The UID of the person who created the group
+  final String adminId;
 
   const GroupChatScreen({
     super.key,
@@ -32,21 +34,15 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   final String currentUid = FirebaseAuth.instance.currentUser!.uid;
   bool _isUploading = false;
 
-  // --- THE GOLDEN RULE: Are you the creator of this group? ---
   bool get _isAdmin => currentUid == widget.adminId;
 
-  // Replace with your actual Cloudinary credentials
   final cloudinary = CloudinaryPublic('dpwh49fxd', 'z1rvuhsd', cache: false);
 
-  // --- 1. UPLOAD LOGIC (ADMIN ONLY) ---
+  // --- UPLOAD LOGIC ---
   Future<String?> _uploadFile(File file, String folder) async {
     try {
       CloudinaryResponse response = await cloudinary.uploadFile(
-        CloudinaryFile.fromFile(
-          file.path,
-          resourceType: CloudinaryResourceType.Auto,
-          folder: "group_files/${widget.groupId}/$folder",
-        ),
+        CloudinaryFile.fromFile(file.path, resourceType: CloudinaryResourceType.Auto, folder: "group_files/${widget.groupId}/$folder"),
       );
       return response.secureUrl;
     } catch (e) {
@@ -56,11 +52,9 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   }
 
   void _pickAndSend(String type) async {
-    if (!_isAdmin) return; // Safety check
-
+    if (!_isAdmin) return;
     setState(() => _isUploading = true);
     String? url;
-
     try {
       if (type == 'image') {
         final XFile? image = await ImagePicker().pickImage(source: ImageSource.gallery);
@@ -69,71 +63,53 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['pdf']);
         if (result != null) url = await _uploadFile(File(result.files.single.path!), 'pdfs');
       }
-
       if (url != null && mounted) {
         _sendMessage(msg: "Sent a ${type == 'image' ? 'photo' : 'PDF'}", type: type, fileUrl: url);
       }
-    } catch (e) {
-      print(e);
-    }
-
+    } catch (e) { print(e); }
     if (mounted) setState(() => _isUploading = false);
   }
 
-  // --- 2. SEND MESSAGE (ADMIN ONLY) ---
+  // --- SEND MESSAGE ---
   void _sendMessage({required String msg, String type = 'text', String? fileUrl}) async {
     if (msg.trim().isEmpty && fileUrl == null) return;
+    User? user = FirebaseAuth.instance.currentUser;
+    String senderName = user?.displayName ?? 'Admin';
 
     Map<String, dynamic> chatData = {
       'senderId': currentUid,
-      'senderName': FirebaseAuth.instance.currentUser!.displayName ?? 'Admin',
+      'senderName': senderName,
       'message': msg,
       'type': type,
       'fileUrl': fileUrl,
       'timestamp': FieldValue.serverTimestamp(),
     };
-
     _messageController.clear();
-
-    await FirebaseFirestore.instance
-        .collection('groups')
-        .doc(widget.groupId)
-        .collection('messages')
-        .add(chatData);
-
+    await FirebaseFirestore.instance.collection('groups').doc(widget.groupId).collection('messages').add(chatData);
     await FirebaseFirestore.instance.collection('groups').doc(widget.groupId).update({
       'recentMessage': type == 'text' ? msg : 'Sent a file',
+      'recentSender': senderName,
       'lastTimestamp': FieldValue.serverTimestamp(),
     });
   }
 
-  // --- 3. DOWNLOAD LOGIC (EVERYONE) ---
   Future<void> _downloadFile(String url, String fileName) async {
     try {
-      // Permission Check
       if (Platform.isAndroid) {
         var status = await Permission.storage.status;
         if (!status.isGranted) await Permission.storage.request();
       }
-
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Downloading...")));
-
       Directory? dir;
       if (Platform.isAndroid) {
-        dir = await getExternalStorageDirectory(); // Saves to Android/data/com.yourapp/files/
+        dir = await getExternalStorageDirectory();
       } else {
         dir = await getApplicationDocumentsDirectory();
       }
-
       if (dir != null) {
         String savePath = "${dir.path}/$fileName";
         await Dio().download(url, savePath);
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Saved to: $savePath"), backgroundColor: Colors.green, duration: const Duration(seconds: 4)),
-          );
-        }
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Saved to: $savePath"), backgroundColor: Colors.green));
       }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Download Error: $e"), backgroundColor: Colors.red));
@@ -144,54 +120,53 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(widget.groupName),
-            Text(
-              _isAdmin ? "You are the Admin" : "Member View",
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w400),
-            ),
-          ],
+        title: InkWell(
+          onTap: () {
+            // --- NAVIGATE TO GROUP INFO SCREEN ---
+            Navigator.push(context, MaterialPageRoute(
+                builder: (_) => GroupInfoScreen(
+                    groupId: widget.groupId,
+                    currentUserId: currentUid
+                )
+            ));
+          },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(widget.groupName), // This will update if you edit it in info screen!
+              Row(
+                children: [
+                  Text(_isAdmin ? "You are Admin" : "Tap for Info", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w400)),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.info_outline, size: 14, color: Colors.white70)
+                ],
+              ),
+            ],
+          ),
         ),
       ),
       body: Column(
         children: [
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('groups')
-                  .doc(widget.groupId)
-                  .collection('messages')
-                  .orderBy('timestamp', descending: true)
-                  .snapshots(),
+              stream: FirebaseFirestore.instance.collection('groups').doc(widget.groupId).collection('messages').orderBy('timestamp', descending: true).snapshots(),
               builder: (context, snapshot) {
                 if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-                var docs = snapshot.data!.docs;
-
-                if (docs.isEmpty) {
-                  return const Center(child: Text("No messages yet."));
-                }
-
+                if (snapshot.data!.docs.isEmpty) return const Center(child: Text("No messages yet."));
                 return ListView.builder(
                   reverse: true,
-                  itemCount: docs.length,
-                  itemBuilder: (context, index) => _buildMessageTile(docs[index]),
+                  itemCount: snapshot.data!.docs.length,
+                  itemBuilder: (context, index) => _buildMessageTile(snapshot.data!.docs[index]),
                 );
               },
             ),
           ),
-
           if (_isUploading) const LinearProgressIndicator(),
-
-          // CONTROL BAR: Admin gets Inputs, Members get "Read Only" text
           _isAdmin ? _buildAdminInputArea() : _buildReadOnlyMessage(),
         ],
       ),
     );
   }
-
-  // --- UI WIDGETS ---
 
   Widget _buildAdminInputArea() {
     return Container(
@@ -228,10 +203,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
             const SizedBox(width: 8),
             CircleAvatar(
               backgroundColor: Colors.indigo,
-              child: IconButton(
-                icon: const Icon(Icons.send, color: Colors.white, size: 20),
-                onPressed: () => _sendMessage(msg: _messageController.text),
-              ),
+              child: IconButton(icon: const Icon(Icons.send, color: Colors.white, size: 20), onPressed: () => _sendMessage(msg: _messageController.text)),
             ),
           ],
         ),
@@ -244,11 +216,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       padding: const EdgeInsets.all(20),
       color: Colors.grey[200],
       width: double.infinity,
-      child: const Text(
-        "Only the Group Admin can post here.",
-        textAlign: TextAlign.center,
-        style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
-      ),
+      child: const Text("Only the Group Admin can post here.", textAlign: TextAlign.center, style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)),
     );
   }
 
@@ -256,131 +224,58 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
     bool isMe = data['senderId'] == currentUid;
     String type = data['type'] ?? 'text';
-
-    // SAFETY FIX: Handle null/empty URLs safely
     String fileUrl = data['fileUrl'] ?? '';
     String fileName = "file_${doc.id}.${type == 'image' ? 'jpg' : 'pdf'}";
+    String senderId = data['senderId'] ?? '';
+    String senderName = data['senderName'] ?? 'Admin';
 
-    return Align(
-      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-        padding: const EdgeInsets.all(12),
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
-        decoration: BoxDecoration(
-          color: isMe ? Colors.indigo[100] : Colors.grey[300],
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(12),
-            topRight: const Radius.circular(12),
-            bottomLeft: isMe ? const Radius.circular(12) : Radius.zero,
-            bottomRight: isMe ? Radius.zero : const Radius.circular(12),
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (!isMe) ...[
-              Text(
-                  data['senderName'] ?? 'Admin',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10, color: Colors.indigo)
-              ),
-              const SizedBox(height: 4),
-            ],
+    Widget userAvatar = AvatarFromProfile(uid: senderId, radius: 16, fallbackLabel: senderName);
 
-            if (type == 'text')
-              Text(data['message'] ?? '', style: const TextStyle(fontSize: 15)),
-
-            if (type == 'image')
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  GestureDetector(
-                    onTap: () {
-                      if (fileUrl.isNotEmpty) {
-                        showDialog(context: context, builder: (_) => Dialog(
-                            child: Image.network(
-                              fileUrl,
-                              errorBuilder: (ctx, err, stack) => const SizedBox(height: 100, child: Center(child: Text("Image unavailable"))),
-                            )
-                        ));
-                      }
-                    },
-                    child: fileUrl.isEmpty
-                        ? _buildBrokenImagePlaceholder()
-                        : Image.network(
-                      fileUrl,
-                      height: 150,
-                      width: 200,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return _buildBrokenImagePlaceholder();
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  if (fileUrl.isNotEmpty)
-                    InkWell(
-                      onTap: () => _downloadFile(fileUrl, fileName),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.download, size: 18, color: Colors.blueGrey),
-                          SizedBox(width: 4),
-                          Text("Download Image", style: TextStyle(color: Colors.blueGrey, fontSize: 12)),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-
-            if (type == 'pdf')
-              Container(
-                margin: const EdgeInsets.only(top: 8),
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.picture_as_pdf, color: Colors.red),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text("Document (PDF)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                          if (fileUrl.isNotEmpty)
-                            InkWell(
-                              onTap: () => _downloadFile(fileUrl, fileName),
-                              child: const Text("Tap to Download", style: TextStyle(color: Colors.blue, fontSize: 12)),
-                            )
-                          else
-                            const Text("File unavailable", style: TextStyle(color: Colors.grey, fontSize: 10, fontStyle: FontStyle.italic)),
-                        ],
-                      ),
-                    ),
-                  ],
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+      child: Row(
+        mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (!isMe) ...[userAvatar, const SizedBox(width: 8)],
+          Flexible(
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.70),
+              decoration: BoxDecoration(
+                color: isMe ? Colors.indigo[100] : Colors.grey[300],
+                borderRadius: BorderRadius.only(
+                  topLeft: const Radius.circular(16), topRight: const Radius.circular(16),
+                  bottomLeft: isMe ? const Radius.circular(16) : Radius.zero, bottomRight: isMe ? Radius.zero : const Radius.circular(16),
                 ),
               ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBrokenImagePlaceholder() {
-    return Container(
-      height: 150,
-      width: 200,
-      color: Colors.grey[400],
-      child: const Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.broken_image, color: Colors.white, size: 40),
-          SizedBox(height: 4),
-          Text("Image not found", style: TextStyle(color: Colors.white, fontSize: 10)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (!isMe) Text(senderName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10, color: Colors.indigo)),
+                  if (type == 'text') Text(data['message'] ?? '', style: const TextStyle(fontSize: 15)),
+                  if (type == 'image') GestureDetector(
+                    onTap: () { if (fileUrl.isNotEmpty) showDialog(context: context, builder: (_) => Dialog(child: Image.network(fileUrl))); },
+                    child: fileUrl.isNotEmpty ? Image.network(fileUrl, height: 150, width: 200, fit: BoxFit.cover) : const Icon(Icons.broken_image),
+                  ),
+                  if (type == 'pdf') InkWell(
+                    onTap: () => _downloadFile(fileUrl, fileName),
+                    child: Container(
+                      margin: const EdgeInsets.only(top: 8), padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
+                      child: const Row(children: [Icon(Icons.picture_as_pdf, color: Colors.red), SizedBox(width: 8), Text("PDF Document", style: TextStyle(fontSize: 12))]),
+                    ),
+                  )
+                ],
+              ),
+            ),
+          ),
+          if (isMe) ...[const SizedBox(width: 8), userAvatar],
         ],
       ),
     );
   }
+
+  Widget _buildBrokenImagePlaceholder() => Container(height: 150, width: 200, color: Colors.grey[400], child: const Icon(Icons.broken_image, color: Colors.white));
 }
