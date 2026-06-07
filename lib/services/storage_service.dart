@@ -6,8 +6,8 @@ import 'package:cloudinary_public/cloudinary_public.dart';
 
 class StorageService {
 
-  final String _cloudName = "dpwh49fxd";
-  final String _uploadPreset = "z1rvuhsd";
+  final String _cloudName = "#########";
+  final String _uploadPreset = "########";
 
   late final CloudinaryPublic _cloudinary;
 
