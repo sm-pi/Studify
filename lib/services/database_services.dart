@@ -22,7 +22,7 @@ class DatabaseService {
       'department': '',
       'intake': '',
       'designation': '',
-      'profileCompleted': false, // <-- THIS IS THE FIX. Add this line.
+      'profileCompleted': false,
     });
   }
 
